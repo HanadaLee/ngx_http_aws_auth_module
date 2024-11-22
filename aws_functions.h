@@ -471,7 +471,7 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
     ngx_libc_gmtime(now, &tm);
     ngx_snprintf(date_stamp, sizeof(date_stamp), "%04d%02d%02d",
                 tm.ngx_tm_year, tm.ngx_tm_mon, tm.ngx_tm_mday);
-    date_stamp[8] = '\0'; // 确保以 NULL 终止
+    date_stamp[8] = '\0';
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generate_signing_key: date_stamp=%s", date_stamp);
@@ -634,7 +634,7 @@ static inline const ngx_array_t* ngx_http_aws_auth__sign(ngx_http_request_t *r,
 
 
     const ngx_str_t *auth_header_value = ngx_http_aws_auth__make_auth_token(r, signature_details.signature,
-                                            signature_details.signed_header_names, access_key, key_scope);
+                                            signature_details.signed_header_names, access_key, used_key_scope);
 
     header_pair_t *header_ptr;
     header_ptr = ngx_array_push(signature_details.header_list);
