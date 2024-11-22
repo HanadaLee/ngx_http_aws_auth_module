@@ -127,6 +127,7 @@ ngx_http_aws_auth_create_loc_conf(ngx_conf_t *cf)
     }
 
     conf->enable = NGX_CONF_UNSET;
+    conf->bypass = NGX_CONF_UNSET_PTR;
 
     return conf;
 }
@@ -144,6 +145,8 @@ ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_str_value(conf->endpoint, prev->endpoint,
         "s3.amazonaws.com");
     ngx_conf_merge_str_value(conf->bucket, prev->bucket, "");
+
+    ngx_conf_merge_ptr_value(conf->bypass, prev->bypass, NULL);
 
     if(conf->signing_key_decoded.data == NULL) {
         conf->signing_key_decoded.data = ngx_pcalloc(cf->pool, 100);
