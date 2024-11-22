@@ -8,16 +8,21 @@
 
 ngx_pool_t *pool;
 
-static void assert_ngx_string_equal(ngx_str_t a, ngx_str_t b) {
+
+static void assert_ngx_string_equal(ngx_str_t a, ngx_str_t b)
+{
 	int len = a.len < b.len ?  a.len : b.len;
     assert_memory_equal(a.data, b.data, len);
 }
 
-static void null_test_success(void **state) {
+
+static void null_test_success(void **state)
+{
     (void) state; /* unused */
 }
 
-static void host_header_ctor(void **state) {
+static void host_header_ctor(void **state)
+{
 	ngx_str_t bucket;
 	const ngx_str_t* host;
 
@@ -34,7 +39,8 @@ static void host_header_ctor(void **state) {
 	assert_string_equal("complex.sub.domain.test.s3.amazonaws.com", host->data);
 }
 
-static void x_amz_date(void **state) {
+static void x_amz_date(void **state)
+{
 	time_t t;
 	const ngx_str_t* date;
 
@@ -52,7 +58,8 @@ static void x_amz_date(void **state) {
 }
 
 
-static void hmac_sha256(void **state) {
+static void hmac_sha256(void **state)
+{
     ngx_str_t key;
     ngx_str_t text;
     ngx_str_t* hash;
@@ -72,7 +79,8 @@ static void hmac_sha256(void **state) {
 }
 
 
-static void sha256(void **state) {
+static void sha256(void **state)
+{
     ngx_str_t text;
     ngx_str_t* hash;
     (void) state; /* unused */
@@ -88,7 +96,8 @@ static void sha256(void **state) {
 	assert_string_equal("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", hash->data);
 }
 
-static void canon_header_string(void **state) {
+static void canon_header_string(void **state)
+{
     (void) state; /* unused */
 
     ngx_str_t bucket, date, hash, endpoint;
@@ -104,7 +113,8 @@ static void canon_header_string(void **state) {
         "host:bugait.s3.amazonaws.com\nx-amz-content-sha256:f0e4c2f76c58916ec258f246851bea091d14d4247a2fc3e18694461b1816e13b\nx-amz-date:20160221T063112Z\n");
 }
 
-static void signed_headers(void **state) {
+static void signed_headers(void **state)
+{
     (void) state; /* unused */
 
     ngx_str_t bucket, date, hash, endpoint;
@@ -119,7 +129,8 @@ static void signed_headers(void **state) {
     assert_string_equal(retval.signed_header_names->data, "host;x-amz-content-sha256;x-amz-date");
 }
 
-static void canonical_qs_empty(void **state) {
+static void canonical_qs_empty(void **state)
+{
     (void) state; /* unused */
 	ngx_http_request_t request;
 	request.args = EMPTY_STRING;
@@ -129,7 +140,8 @@ static void canonical_qs_empty(void **state) {
     assert_ngx_string_equal(*canon_qs, EMPTY_STRING);
 }
 
-static void canonical_qs_single_arg(void **state) {
+static void canonical_qs_single_arg(void **state)
+{
     (void) state; /* unused */
 	ngx_http_request_t request;
 	ngx_str_t args = ngx_string("arg1=val1");
@@ -140,7 +152,8 @@ static void canonical_qs_single_arg(void **state) {
     assert_ngx_string_equal(*canon_qs, args);
 }
 
-static void canonical_qs_two_arg_reverse(void **state) {
+static void canonical_qs_two_arg_reverse(void **state)
+{
     (void) state; /* unused */
 	ngx_http_request_t request;
 	ngx_str_t args = ngx_string("brg1=val2&arg1=val1");
@@ -152,7 +165,8 @@ static void canonical_qs_two_arg_reverse(void **state) {
     assert_ngx_string_equal(*canon_qs, cargs);
 }
 
-static void canonical_qs_subrequest(void **state) {
+static void canonical_qs_subrequest(void **state)
+{
     (void) state; /* unused */
 	ngx_http_request_t request;
 	ngx_str_t args = ngx_string("acl");
@@ -164,7 +178,8 @@ static void canonical_qs_subrequest(void **state) {
     assert_ngx_string_equal(*canon_qs, cargs);
 }
 
-static void canonical_url_sans_qs(void **state) {
+static void canonical_url_sans_qs(void **state)
+{
     (void) state; /* unused */
 
 	ngx_http_request_t request;
@@ -180,7 +195,8 @@ static void canonical_url_sans_qs(void **state) {
     assert_ngx_string_equal(*canon_url, url);
 }
 
-static void canonical_url_with_qs(void **state) {
+static void canonical_url_with_qs(void **state)
+{
     (void) state; /* unused */
 
 	ngx_http_request_t request;
@@ -202,7 +218,8 @@ static void canonical_url_with_qs(void **state) {
     assert_ngx_string_equal(*canon_url, curl);
 }
 
-static void canonical_url_with_special_chars(void **state) {
+static void canonical_url_with_special_chars(void **state)
+{
   (void) state; /* unused */
 
   ngx_str_t url = ngx_string("f&o@o/b ar.php");
@@ -220,7 +237,8 @@ static void canonical_url_with_special_chars(void **state) {
     assert_ngx_string_equal(*canon_url, expected_canon_url);
 }
 
-static void canonical_request_sans_qs(void **state) {
+static void canonical_request_sans_qs(void **state)
+{
     (void) state; /* unused */
 	const ngx_str_t bucket = ngx_string("example");
 	const ngx_str_t aws_date = ngx_string("20160221T063112Z");
@@ -248,7 +266,8 @@ host;x-amz-content-sha256;x-amz-date\n\
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
 }
 
-static void basic_get_signature(void **state) {
+static void basic_get_signature(void **state)
+{
     (void) state; /* unused */
 
 	const ngx_str_t url = ngx_string("/");
@@ -275,7 +294,8 @@ static void basic_get_signature(void **state) {
 	assert_string_equal(result.signature->data, "4ed4ec875ff02e55c7903339f4f24f8780b986a9cc9eff03f324d31da6a57690");
 }
 
-int main() {
+int main()
+{
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(null_test_success),
         cmocka_unit_test(x_amz_date),
