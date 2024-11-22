@@ -171,7 +171,7 @@ ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_str_value(conf->key_scope, prev->key_scope, "");
     ngx_conf_merge_str_value(conf->signing_key, prev->signing_key, "");
     ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
-    ngx_conf_merge_str_value(conf->region_key, prev->region_key, "");
+    ngx_conf_merge_str_value(conf->region, prev->region, "us-east-1");
     ngx_conf_merge_str_value(conf->endpoint, prev->endpoint,
         "s3.amazonaws.com");
     ngx_conf_merge_str_value(conf->bucket, prev->bucket, "");
