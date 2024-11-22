@@ -463,11 +463,18 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
     time_t      now;
     size_t      key_scope_len;
 
+    ngx_log_debug3(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "generate_signing_key: secret_key.len=%uz, region.len=%uz, convert_head=%d",
+                   secret_key->len, region->len, 1);
+
     now = ngx_time();
     ngx_libc_gmtime(now, &tm);
     ngx_snprintf(date_stamp, sizeof(date_stamp), "%04d%02d%02d",
-                 tm.ngx_tm_year, tm.ngx_tm_mon, tm.ngx_tm_mday);
-    date_stamp[8] = '\0';
+                tm.ngx_tm_year, tm.ngx_tm_mon, tm.ngx_tm_mday);
+    date_stamp[8] = '\0'; // 确保以 NULL 终止
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "generate_signing_key: date_stamp=%s", date_stamp);
 
     ngx_str_t service = ngx_string("s3");
     ngx_str_t aws4_request = ngx_string("aws4_request");
@@ -477,21 +484,31 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
 
     key_scope->data = ngx_pnalloc(r->pool, key_scope_len + 1);
     if (key_scope->data == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                      "generate_signing_key: failed to allocate memory for key_scope");
         return NGX_ERROR;
     }
 
     key_scope->len = ngx_snprintf(key_scope->data, key_scope_len + 1, "%s/%V/%V/%V",
-                                      date_stamp, region, &service, &aws4_request)
-                         - key_scope->data;
+                                  date_stamp, region, &service, &aws4_request)
+                     - key_scope->data;
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "generate_signing_key: key_scope=%V", key_scope);
 
     size_t kSecret_len = 4 + secret_key->len;
     u_char *kSecret = ngx_pnalloc(r->pool, kSecret_len);
     if (kSecret == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                      "generate_signing_key: failed to allocate memory for kSecret");
         return NGX_ERROR;
     }
 
     ngx_memcpy(kSecret, "AWS4", 4);
     ngx_memcpy(kSecret + 4, secret_key->data, secret_key->len);
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "generate_signing_key: kSecret prepared (length=%uz)", kSecret_len);
 
     ngx_str_t data_to_sign[] = {
         {8, date_stamp},          // date_stamp
@@ -514,22 +531,47 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
 #else
     ctx = HMAC_CTX_new();
     if (ctx == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                      "generate_signing_key: failed to create HMAC_CTX");
         return NGX_ERROR;
     }
 #endif
 
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "generate_signing_key: starting HMAC calculations");
+
     for (int i = 0; i < 4; i++) {
-        if (HMAC_Init_ex(ctx, key, key_len, EVP_sha256(), NULL) != 1 ||
-            HMAC_Update(ctx, data_to_sign[i].data, data_to_sign[i].len) != 1 ||
-            HMAC_Final(ctx, hmac_result, &hmac_len) != 1)
-        {
+        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                       "generate_signing_key: HMAC step %d", i + 1);
+
+        if (HMAC_Init_ex(ctx, key, key_len, EVP_sha256(), NULL) != 1) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                          "generate_signing_key: HMAC_Init_ex failed at step %d", i + 1);
             goto hmac_fail;
         }
+
+        if (HMAC_Update(ctx, data_to_sign[i].data, data_to_sign[i].len) != 1) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                          "generate_signing_key: HMAC_Update failed at step %d", i + 1);
+            goto hmac_fail;
+        }
+
+        if (HMAC_Final(ctx, hmac_result, &hmac_len) != 1) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                          "generate_signing_key: HMAC_Final failed at step %d", i + 1);
+            goto hmac_fail;
+        }
+
+        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                       "generate_signing_key: HMAC step %d completed, result length=%u",
+                       i + 1, hmac_len);
 
         key = hmac_result;
         key_len = hmac_len;
 
         if (HMAC_Init_ex(ctx, NULL, 0, NULL, NULL) != 1) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                          "generate_signing_key: HMAC_Init_ex reset failed after step %d", i + 1);
             goto hmac_fail;
         }
     }
@@ -542,11 +584,16 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
 
     signature_key->data = ngx_pnalloc(r->pool, hmac_len);
     if (signature_key->data == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                      "generate_signing_key: failed to allocate memory for signature_key");
         return NGX_ERROR;
     }
 
     signature_key->len = hmac_len;
     ngx_memcpy(signature_key->data, hmac_result, hmac_len);
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "generate_signing_key: signature_key generated (len=%uz)", signature_key->len);
 
     return NGX_OK;
 
@@ -556,6 +603,8 @@ hmac_fail:
 #else
     HMAC_CTX_free(ctx);
 #endif
+    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                  "generate_signing_key: HMAC computation failed");
     return NGX_ERROR;
 }
 
