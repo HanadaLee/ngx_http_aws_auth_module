@@ -468,8 +468,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
                    secret_key->len, region->len, 1);
 
     now = ngx_time();
-    ngx_libc_gmtime(now, &tm);
-    ngx_snprintf(date_stamp, sizeof(date_stamp), "%4d%02d%02d",
+    ngx_gmtime(now, &tm);
+    ngx_sprintf(date_stamp, "%4d%02d%02d",
                 tm.ngx_tm_year, tm.ngx_tm_mon, tm.ngx_tm_mday);
     date_stamp[8] = '\0';
 
