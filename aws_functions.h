@@ -460,7 +460,7 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
 {
     u_char      date_stamp[9];
     ngx_tm_t    tm;
-    ngx_time_t  now;
+    time_t      now;
     size_t      key_scope_len;
 
     now = ngx_time();
@@ -480,12 +480,12 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
         return NGX_ERROR;
     }
 
-    key_scope->len = ngx_snprintf(out_key_scope->data, key_scope_len + 1, "%s/%V/%V/%V",
+    key_scope->len = ngx_snprintf(key_scope->data, key_scope_len + 1, "%s/%V/%V/%V",
                                       date_stamp, region, &service, &aws4_request)
-                         - out_key_scope->data;
+                         - key_scope->data;
 
     size_t kSecret_len = 4 + secret_key->len;
-    u_char *kSecret = ngx_pnalloc(pool, kSecret_len);
+    u_char *kSecret = ngx_pnalloc(r->pool, kSecret_len);
     if (kSecret == NULL) {
         return NGX_ERROR;
     }
@@ -581,7 +581,7 @@ static inline const ngx_array_t* ngx_http_aws_auth__sign(ngx_http_request_t *r,
         used_key_scope = &local_key_scope;
     }
 
-    const struct AwsSignedRequestDetails signature_details = ngx_http_aws_auth__compute_signature(r, signing_key, key_scope, s3_bucket_name, s3_endpoint, convert_head);
+    const struct AwsSignedRequestDetails signature_details = ngx_http_aws_auth__compute_signature(r, used_signing_key, used_key_scope, s3_bucket_name, s3_endpoint, convert_head);
 
 
     const ngx_str_t *auth_header_value = ngx_http_aws_auth__make_auth_token(r, signature_details.signature,
