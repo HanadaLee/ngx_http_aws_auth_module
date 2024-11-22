@@ -26,6 +26,8 @@ typedef struct {
     ngx_str_t      access_key;
     ngx_str_t      key_scope;
     ngx_str_t      signing_key;
+    ngx_str_t      secret_key;
+    ngx_str_t      region;
     ngx_str_t      signing_key_decoded;
     ngx_str_t      endpoint;
     ngx_str_t      bucket;
@@ -52,6 +54,20 @@ static ngx_command_t  ngx_http_aws_auth_commands[] = {
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aws_auth_conf_t, signing_key),
+      NULL },
+
+    { ngx_string("aws_auth_secret_key"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aws_auth_conf_t, secret_key),
+      NULL },
+
+    { ngx_string("aws_auth_region"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aws_auth_conf_t, region),
       NULL },
 
     { ngx_string("aws_auth_endpoint"),
@@ -154,6 +170,8 @@ ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_str_value(conf->access_key, prev->access_key, "");
     ngx_conf_merge_str_value(conf->key_scope, prev->key_scope, "");
     ngx_conf_merge_str_value(conf->signing_key, prev->signing_key, "");
+    ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
+    ngx_conf_merge_str_value(conf->region_key, prev->region_key, "");
     ngx_conf_merge_str_value(conf->endpoint, prev->endpoint,
         "s3.amazonaws.com");
     ngx_conf_merge_str_value(conf->bucket, prev->bucket, "");
@@ -209,9 +227,10 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
         return NGX_DECLINED;
     }
 
-    const ngx_array_t* headers_out = ngx_http_aws_auth__sign(r->pool, r,
-        &conf->access_key, &conf->signing_key_decoded,&conf->key_scope,
-        &conf->bucket, &conf->endpoint, &conf->convert_head);
+    const ngx_array_t* headers_out = ngx_http_aws_auth__sign(r,
+        &conf->access_key, &conf->signing_key_decoded, &conf->key_scope,
+        &conf->secret_key, &conf->region, &conf->bucket, &conf->endpoint,
+        &conf->convert_head);
 
     for (i = 0; i < headers_out->nelts; i++) {
         hv = (header_pair_t*)((u_char *) headers_out->elts
