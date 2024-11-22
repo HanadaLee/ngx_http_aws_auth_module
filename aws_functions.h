@@ -463,6 +463,18 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
     time_t      now;
     size_t      key_scope_len;
 
+    unsigned char kDate[EVP_MAX_MD_SIZE];
+    unsigned int  kDate_len;
+
+    unsigned char kRegion[EVP_MAX_MD_SIZE];
+    unsigned int  kRegion_len;
+
+    unsigned char kService[EVP_MAX_MD_SIZE];
+    unsigned int  kService_len;
+
+    unsigned char kSigning[EVP_MAX_MD_SIZE];
+    unsigned int  kSigning_len;
+
     ngx_log_debug3(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generate_signing_key: secret_key.len=%uz, region.len=%uz, convert_head=%d",
                    secret_key->len, region->len, 1);
@@ -510,102 +522,60 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generate_signing_key: kSecret prepared (length=%uz)", kSecret_len);
 
-    ngx_str_t data_to_sign[] = {
-        {8, date_stamp},          // date_stamp
-        *region,                  // region
-        service,                  // service
-        aws4_request              // "aws4_request"
-    };
-
-    u_char     *key = kSecret;
-    size_t      key_len = kSecret_len;
-
-    unsigned char hmac_result[EVP_MAX_MD_SIZE];
-    unsigned int  hmac_len;
-
-    HMAC_CTX *ctx;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    HMAC_CTX ctx_old;
-    ctx = &ctx_old;
-    HMAC_CTX_init(ctx);
-#else
-    ctx = HMAC_CTX_new();
-    if (ctx == NULL) {
+    // 1. kDate = HMAC("AWS4" + SecretKey, Date)
+    if (HMAC(EVP_sha256(), kSecret, kSecret_len,
+             date_stamp, 8, kDate, &kDate_len) == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: failed to create HMAC_CTX");
+                      "generate_signing_key: HMAC computation failed at kDate step");
         return NGX_ERROR;
     }
-#endif
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "generate_signing_key: kDate computed (len=%u)", kDate_len);
 
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "generate_signing_key: starting HMAC calculations");
-
-    for (int i = 0; i < 4; i++) {
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                       "generate_signing_key: HMAC step %d", i + 1);
-
-        if (HMAC_Init_ex(ctx, key, key_len, EVP_sha256(), NULL) != 1) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                          "generate_signing_key: HMAC_Init_ex failed at step %d", i + 1);
-            goto hmac_fail;
-        }
-
-        if (HMAC_Update(ctx, data_to_sign[i].data, data_to_sign[i].len) != 1) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                          "generate_signing_key: HMAC_Update failed at step %d", i + 1);
-            goto hmac_fail;
-        }
-
-        if (HMAC_Final(ctx, hmac_result, &hmac_len) != 1) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                          "generate_signing_key: HMAC_Final failed at step %d", i + 1);
-            goto hmac_fail;
-        }
-
-        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                       "generate_signing_key: HMAC step %d completed, result length=%u",
-                       i + 1, hmac_len);
-
-        key = hmac_result;
-        key_len = hmac_len;
-
-        if (HMAC_Init_ex(ctx, NULL, 0, NULL, NULL) != 1) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                          "generate_signing_key: HMAC_Init_ex reset failed after step %d", i + 1);
-            goto hmac_fail;
-        }
+    // 2. kRegion = HMAC(kDate, Region)
+    if (HMAC(EVP_sha256(), kDate, kDate_len,
+             region->data, region->len, kRegion, &kRegion_len) == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                      "generate_signing_key: HMAC computation failed at kRegion step");
+        return NGX_ERROR;
     }
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "generate_signing_key: kRegion computed (len=%u)", kRegion_len);
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    HMAC_CTX_cleanup(ctx);
-#else
-    HMAC_CTX_free(ctx);
-#endif
+    // 3. kService = HMAC(kRegion, Service)
+    if (HMAC(EVP_sha256(), kRegion, kRegion_len,
+             service.data, service.len, kService, &kService_len) == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                      "generate_signing_key: HMAC computation failed at kService step");
+        return NGX_ERROR;
+    }
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "generate_signing_key: kService computed (len=%u)", kService_len);
 
-    signature_key->data = ngx_pnalloc(r->pool, hmac_len);
+    // 4. kSigning = HMAC(kService, "aws4_request")
+    if (HMAC(EVP_sha256(), kService, kService_len,
+             aws4_request.data, aws4_request.len, kSigning, &kSigning_len) == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                      "generate_signing_key: HMAC computation failed at kSigning step");
+        return NGX_ERROR;
+    }
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                    "generate_signing_key: kSigning computed (len=%u)", kSigning_len);
+
+    signature_key->data = ngx_pnalloc(r->pool, kSigning_len);
     if (signature_key->data == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "generate_signing_key: failed to allocate memory for signature_key");
         return NGX_ERROR;
     }
 
-    signature_key->len = hmac_len;
-    ngx_memcpy(signature_key->data, hmac_result, hmac_len);
+    signature_key->len = kSigning_len;
+    ngx_memcpy(signature_key->data, kSigning, kSigning_len);
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generate_signing_key: signature_key generated (len=%uz)", signature_key->len);
 
     return NGX_OK;
-
-hmac_fail:
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    HMAC_CTX_cleanup(ctx);
-#else
-    HMAC_CTX_free(ctx);
-#endif
-    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                  "generate_signing_key: HMAC computation failed");
-    return NGX_ERROR;
 }
 
 
