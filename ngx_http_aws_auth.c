@@ -18,13 +18,16 @@ static ngx_int_t ngx_http_aws_auth_req_init(ngx_conf_t *cf);
 
 
 typedef struct {
-    ngx_flag_t   enable;
-    ngx_str_t    access_key;
-    ngx_str_t    key_scope;
-    ngx_str_t    signing_key;
-    ngx_str_t    signing_key_decoded;
-    ngx_str_t    endpoint;
-    ngx_str_t    bucket;
+    ngx_flag_t     enable;
+
+    ngx_array_t   *bypass;
+
+    ngx_str_t      access_key;
+    ngx_str_t      key_scope;
+    ngx_str_t      signing_key;
+    ngx_str_t      signing_key_decoded;
+    ngx_str_t      endpoint;
+    ngx_str_t      bucket;
 } ngx_http_aws_auth_conf_t;
 
 
@@ -62,6 +65,13 @@ static ngx_command_t  ngx_http_aws_auth_commands[] = {
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aws_auth_conf_t, bucket),
+      NULL },
+
+    { ngx_string("aws_auth_bypass"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
+      ngx_http_set_predicate_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aws_auth_conf_t, bypass),
       NULL },
 
     { ngx_string("aws_auth"),
@@ -137,8 +147,7 @@ ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
     if(conf->signing_key_decoded.data == NULL) {
         conf->signing_key_decoded.data = ngx_pcalloc(cf->pool, 100);
-        if(conf->signing_key_decoded.data == NULL)
-        {
+        if(conf->signing_key_decoded.data == NULL) {
             return NGX_CONF_ERROR;
         }
     }
@@ -158,12 +167,26 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
 {
     ngx_http_aws_auth_conf_t *conf = ngx_http_get_module_loc_conf(r,
         ngx_http_aws_auth_module);
+    ngx_table_elt_t          *h;
+    header_pair_t            *hv;
+    ngx_uint_t                i;
+
     if(!conf->enable) {
         /* return directly if module is not enable */
         return NGX_DECLINED;
     }
-    ngx_table_elt_t  *h;
-    header_pair_t *hv;
+
+    switch (ngx_http_test_predicates(r, conf->bypass)) {
+
+    case NGX_ERROR:
+        return NGX_ERROR;
+
+    case NGX_DECLINED:
+        return NGX_DECLINED;
+
+    default: /* NGX_OK */
+        break;
+    }
 
     if (!(r->method & (NGX_HTTP_GET|NGX_HTTP_HEAD))) {
         /* We do not wish to support anything with a body as signing for a body is unimplemented */
@@ -175,9 +198,7 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
         &conf->access_key, &conf->signing_key_decoded,&conf->key_scope,
         &conf->bucket, &conf->endpoint);
 
-    ngx_uint_t i;
-    for(i = 0; i < headers_out->nelts; i++)
-    {
+    for (i = 0; i < headers_out->nelts; i++) {
         hv = (header_pair_t*)((u_char *) headers_out->elts
             + headers_out->size * i);
         ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -199,6 +220,7 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
         h->lowcase_key = hv->key.data; /* We ensure that header names are already lowercased */
         h->value = hv->value;
     }
+
     return NGX_OK;
 }
 
@@ -206,8 +228,7 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
 static char *
 ngx_http_aws_auth_endpoint(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-    char *p = conf;
-
+    char      *p = conf;
     ngx_str_t *field, *value;
 
     field = (ngx_str_t *)(p + cmd->offset);
