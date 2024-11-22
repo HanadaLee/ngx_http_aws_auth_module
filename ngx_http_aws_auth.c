@@ -11,11 +11,10 @@
 static void* ngx_http_aws_auth_create_loc_conf(ngx_conf_t *cf);
 static char* ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf,
     void *parent, void *child);
-static ngx_int_t ngx_http_aws_auth_req_init(ngx_conf_t *cf);
+static ngx_int_t ngx_http_aws_auth_sign(ngx_http_request_t *r);
 static char * ngx_http_aws_auth_endpoint(ngx_conf_t *cf,
     ngx_command_t *cmd, void *conf);
-static char* ngx_http_aws_auth_sign(ngx_conf_t *cf,
-    ngx_command_t *cmd, void *conf);
+static ngx_int_t ngx_http_aws_auth_req_init(ngx_conf_t *cf);
 
 
 typedef struct {
