@@ -433,7 +433,7 @@ static inline const ngx_str_t* ngx_http_aws_auth__make_auth_token(ngx_pool_t *po
 
 static inline struct AwsSignedRequestDetails ngx_http_aws_auth__compute_signature(ngx_pool_t *pool, ngx_http_request_t *r,
     const ngx_str_t *signing_key, const ngx_str_t *key_scope, const ngx_str_t *s3_bucket_name,
-    const ngx_str_t *s3_endpoint, conse ngx_flag_t *convert_head)
+    const ngx_str_t *s3_endpoint, const ngx_flag_t *convert_head)
 {
     struct AwsSignedRequestDetails retval;
 
