@@ -530,14 +530,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
                       "generate_signing_key: HMAC_SHA256 failed at step kDate");
         return NGX_ERROR;
     }
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generate_signing_key: kDate computed (len=%uz)", kDate->len);
-
-    if (kDate->len != EVP_MD_size(EVP_sha256())) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: unexpected HMAC length at step kDate: %u", kDate->len);
-        return NGX_ERROR;
-    }
 
     // Step 2: kRegion = HMAC_SHA256(kDate, region)
     ngx_str_t *kRegion = ngx_http_aws_auth__sign_sha256(r, &data_to_sign_region, kDate);
@@ -546,14 +540,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
                       "generate_signing_key: HMAC_SHA256 failed at step kRegion");
         return NGX_ERROR;
     }
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generate_signing_key: kRegion computed (len=%uz)", kRegion->len);
-
-    if (kRegion->len != EVP_MD_size(EVP_sha256())) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: unexpected HMAC length at step kRegion: %u", kRegion->len);
-        return NGX_ERROR;
-    }
 
     // Step 3: kService = HMAC_SHA256(kRegion, service)
     ngx_str_t *kService = ngx_http_aws_auth__sign_sha256(r, &data_to_sign_service, kRegion);
@@ -562,14 +550,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
                       "generate_signing_key: HMAC_SHA256 failed at step kService");
         return NGX_ERROR;
     }
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generate_signing_key: kService computed (len=%uz)", kService->len);
-
-    if (kService->len != EVP_MD_size(EVP_sha256())) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: unexpected HMAC length at step kService: %u", kService->len);
-        return NGX_ERROR;
-    }
 
     // Step 4: kSigning = HMAC_SHA256(kService, aws4_request)
     ngx_str_t *kSigning = ngx_http_aws_auth__sign_sha256(r, &data_to_sign_request, kService);
@@ -578,14 +560,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
                       "generate_signing_key: HMAC_SHA256 failed at step kSigning");
         return NGX_ERROR;
     }
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generate_signing_key: kSigning computed (len=%uz)", kSigning->len);
-
-    if (kSigning->len != EVP_MD_size(EVP_sha256())) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: unexpected HMAC length at step kSigning: %u", kSigning->len);
-        return NGX_ERROR;
-    }
 
     signature_key->data = ngx_pnalloc(r->pool, kSigning->len);
     if (signature_key->data == NULL) {
