@@ -36,21 +36,21 @@
 typedef ngx_keyval_t header_pair_t;
 
 struct AwsCanonicalRequestDetails {
-    ngx_str_t *canon_request;
-    ngx_str_t *signed_header_names;
-    ngx_array_t *header_list; // list of header_pair_t
+    ngx_str_t       *canon_request;
+    ngx_str_t       *signed_header_names;
+    ngx_array_t     *header_list; // list of header_pair_t
 };
 
 struct AwsCanonicalHeaderDetails {
-    ngx_str_t *canon_header_str;
-    ngx_str_t *signed_header_names;
-    ngx_array_t *header_list; // list of header_pair_t
+    ngx_str_t       *canon_header_str;
+    ngx_str_t       *signed_header_names;
+    ngx_array_t     *header_list; // list of header_pair_t
 };
 
 struct AwsSignedRequestDetails {
     const ngx_str_t *signature;
     const ngx_str_t *signed_header_names;
-    ngx_array_t *header_list; // list of header_pair_t
+    ngx_array_t     *header_list; // list of header_pair_t
 };
 
 
@@ -453,12 +453,134 @@ static inline struct AwsSignedRequestDetails ngx_http_aws_auth__compute_signatur
 }
 
 
+static ngx_int_t
+ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
+    const ngx_str_t *secret_key, const ngx_str_t *region,
+    ngx_str_t *signature_key, ngx_str_t *key_scope)
+{
+    u_char      date_stamp[9];
+    ngx_tm_t    tm;
+    ngx_time_t  now;
+    size_t      key_scope_len;
+
+    now = ngx_time();
+    ngx_libc_gmtime(now, &tm);
+    ngx_snprintf(date_stamp, sizeof(date_stamp), "%04d%02d%02d",
+                 tm.ngx_tm_year, tm.ngx_tm_mon, tm.ngx_tm_mday);
+    date_stamp[8] = '\0';
+
+    ngx_str_t service = ngx_string("s3");
+    ngx_str_t aws4_request = ngx_string("aws4_request");
+
+    key_scope_len = ngx_strlen(date_stamp) + 1 + region->len + 1 +
+                    service.len + 1 + aws4_request.len;
+
+    key_scope->data = ngx_pnalloc(r->pool, key_scope_len + 1);
+    if (key_scope->data == NULL) {
+        return NGX_ERROR;
+    }
+
+    key_scope->len = ngx_snprintf(out_key_scope->data, key_scope_len + 1, "%s/%V/%V/%V",
+                                      date_stamp, region, &service, &aws4_request)
+                         - out_key_scope->data;
+
+    size_t kSecret_len = 4 + secret_key->len;
+    u_char *kSecret = ngx_pnalloc(pool, kSecret_len);
+    if (kSecret == NULL) {
+        return NGX_ERROR;
+    }
+
+    ngx_memcpy(kSecret, "AWS4", 4);
+    ngx_memcpy(kSecret + 4, secret_key->data, secret_key->len);
+
+    ngx_str_t data_to_sign[] = {
+        {8, date_stamp},          // date_stamp
+        *region,                  // region
+        service,                  // service
+        aws4_request              // "aws4_request"
+    };
+
+    u_char     *key = kSecret;
+    size_t      key_len = kSecret_len;
+
+    unsigned char hmac_result[EVP_MAX_MD_SIZE];
+    unsigned int  hmac_len;
+
+    HMAC_CTX *ctx;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    HMAC_CTX ctx_old;
+    ctx = &ctx_old;
+    HMAC_CTX_init(ctx);
+#else
+    ctx = HMAC_CTX_new();
+    if (ctx == NULL) {
+        return NGX_ERROR;
+    }
+#endif
+
+    for (int i = 0; i < 4; i++) {
+        if (HMAC_Init_ex(ctx, key, key_len, EVP_sha256(), NULL) != 1 ||
+            HMAC_Update(ctx, data_to_sign[i].data, data_to_sign[i].len) != 1 ||
+            HMAC_Final(ctx, hmac_result, &hmac_len) != 1)
+        {
+            goto hmac_fail;
+        }
+
+        key = hmac_result;
+        key_len = hmac_len;
+
+        if (HMAC_Init_ex(ctx, NULL, 0, NULL, NULL) != 1) {
+            goto hmac_fail;
+        }
+    }
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    HMAC_CTX_cleanup(ctx);
+#else
+    HMAC_CTX_free(ctx);
+#endif
+
+    signature_key->data = ngx_pnalloc(r->pool, hmac_len);
+    if (signature_key->data == NULL) {
+        return NGX_ERROR;
+    }
+
+    signature_key->len = hmac_len;
+    ngx_memcpy(signature_key->data, hmac_result, hmac_len);
+
+    return NGX_OK;
+
+hmac_fail:
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    HMAC_CTX_cleanup(ctx);
+#else
+    HMAC_CTX_free(ctx);
+#endif
+    return NGX_ERROR;
+}
+
+
 // list of header_pair_t
 static inline const ngx_array_t* ngx_http_aws_auth__sign(ngx_http_request_t *r,
     const ngx_str_t *access_key, const ngx_str_t *signing_key, const ngx_str_t *key_scope,
     const ngx_str_t *secret_key, const ngx_str_t *region, const ngx_str_t *s3_bucket_name,
     const ngx_str_t *s3_endpoint, const ngx_flag_t *convert_head)
 {
+    ngx_str_t local_signing_key;
+    ngx_str_t local_key_scope;
+    const ngx_str_t *used_signing_key = signing_key;
+    const ngx_str_t *used_key_scope = key_scope;
+
+    if (signing_key == NULL || signing_key->len == 0 || signing_key->data == NULL) {
+        ngx_memzero(&local_signing_key, sizeof(ngx_str_t));
+        ngx_memzero(&local_key_scope, sizeof(ngx_str_t));
+
+        ngx_http_aws_auth__generate_signing_key(r, secret_key, region, &local_signing_key, &local_key_scope);
+
+        used_signing_key = &local_signing_key;
+        used_key_scope = &local_key_scope;
+    }
+
     const struct AwsSignedRequestDetails signature_details = ngx_http_aws_auth__compute_signature(r, signing_key, key_scope, s3_bucket_name, s3_endpoint, convert_head);
 
 
