@@ -19,6 +19,7 @@ static ngx_int_t ngx_http_aws_auth_req_init(ngx_conf_t *cf);
 
 typedef struct {
     ngx_flag_t     enable;
+    ngx_flag_t     convert_head;
 
     ngx_array_t   *bypass;
 
@@ -67,6 +68,13 @@ static ngx_command_t  ngx_http_aws_auth_commands[] = {
       offsetof(ngx_http_aws_auth_conf_t, bucket),
       NULL },
 
+    { ngx_string("aws_auth_convert_head"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_FLAG,
+      ngx_conf_set_flag_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aws_auth_conf_t, convert_head),
+      NULL },
+
     { ngx_string("aws_auth_bypass"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
       ngx_http_set_predicate_slot,
@@ -87,7 +95,7 @@ static ngx_command_t  ngx_http_aws_auth_commands[] = {
 
 static ngx_http_module_t  ngx_http_aws_auth_module_ctx = {
     NULL,                                  /* preconfiguration */
-    ngx_http_aws_auth_req_init,                 /* postconfiguration */
+    ngx_http_aws_auth_req_init,            /* postconfiguration */
 
     NULL,                                  /* create main configuration */
     NULL,                                  /* init main configuration */
@@ -128,6 +136,7 @@ ngx_http_aws_auth_create_loc_conf(ngx_conf_t *cf)
 
     conf->enable = NGX_CONF_UNSET;
     conf->bypass = NGX_CONF_UNSET_PTR;
+    conf->convert_head = NGX_CONF_UNSET;
 
     return conf;
 }
@@ -138,6 +147,9 @@ ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 {
     ngx_http_aws_auth_conf_t *prev = parent;
     ngx_http_aws_auth_conf_t *conf = child;
+
+    ngx_conf_merge_value(conf->enable, prev->enable, 0);
+    ngx_conf_merge_value(conf->convert_head, prev->convert_head, 1);
 
     ngx_conf_merge_str_value(conf->access_key, prev->access_key, "");
     ngx_conf_merge_str_value(conf->key_scope, prev->key_scope, "");
@@ -199,7 +211,7 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
 
     const ngx_array_t* headers_out = ngx_http_aws_auth__sign(r->pool, r,
         &conf->access_key, &conf->signing_key_decoded,&conf->key_scope,
-        &conf->bucket, &conf->endpoint);
+        &conf->bucket, &conf->endpoint, &conf->convert_head);
 
     for (i = 0; i < headers_out->nelts; i++) {
         hv = (header_pair_t*)((u_char *) headers_out->elts
