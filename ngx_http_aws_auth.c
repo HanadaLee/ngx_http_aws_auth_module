@@ -3,78 +3,82 @@
 #include <ngx_http.h>
 #include "aws_functions.h"
 
+
 #define AWS_S3_VARIABLE "s3_auth_token"
 #define AWS_DATE_VARIABLE "aws_date"
+
 
 static void* ngx_http_aws_auth_create_loc_conf(ngx_conf_t *cf);
 static char* ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf,
     void *parent, void *child);
-static ngx_int_t ngx_aws_auth_req_init(ngx_conf_t *cf);
-static char * ngx_http_aws_endpoint(ngx_conf_t *cf,
+static ngx_int_t ngx_http_aws_auth_req_init(ngx_conf_t *cf);
+static char * ngx_http_aws_auth_endpoint(ngx_conf_t *cf,
     ngx_command_t *cmd, void *conf);
-static char* ngx_http_aws_sign(ngx_conf_t *cf,
+static char* ngx_http_aws_auth_sign(ngx_conf_t *cf,
     ngx_command_t *cmd, void *conf);
 
+
 typedef struct {
-    ngx_str_t  access_key;
-    ngx_str_t  key_scope;
-    ngx_str_t  signing_key;
-    ngx_str_t  signing_key_decoded;
-    ngx_str_t  endpoint;
-    ngx_str_t  bucket_name;
-    ngx_uint_t enabled;
+    ngx_flag_t   enable;
+    ngx_str_t    access_key;
+    ngx_str_t    key_scope;
+    ngx_str_t    signing_key;
+    ngx_str_t    signing_key_decoded;
+    ngx_str_t    endpoint;
+    ngx_str_t    bucket_name;
 } ngx_http_aws_auth_conf_t;
 
 
 static ngx_command_t  ngx_http_aws_auth_commands[] = {
-    { ngx_string("aws_access_key"),
+    { ngx_string("aws_auth_access_key"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aws_auth_conf_t, access_key),
       NULL },
 
-    { ngx_string("aws_key_scope"),
+    { ngx_string("aws_auth_key_scope"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aws_auth_conf_t, key_scope),
       NULL },
 
-    { ngx_string("aws_signing_key"),
+    { ngx_string("aws_auth_signing_key"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aws_auth_conf_t, signing_key),
       NULL },
 
-    { ngx_string("aws_endpoint"),
+    { ngx_string("aws_auth_endpoint"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_http_aws_endpoint,
+      ngx_http_aws_auth_endpoint,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aws_auth_conf_t, endpoint),
       NULL },
 
-    { ngx_string("aws_s3_bucket"),
+    { ngx_string("aws_auth_s3_bucket"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aws_auth_conf_t, bucket_name),
       NULL },
 
-    { ngx_string("aws_sign"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_NOARGS,
-      ngx_http_aws_sign,
-      0,
-      0,
+    { ngx_string("aws_auth"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_FLAG,
+      ngx_conf_set_flag_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aws_auth_conf_t, enable),
       NULL },
 
       ngx_null_command
 };
 
+
 static ngx_http_module_t  ngx_http_aws_auth_module_ctx = {
     NULL,                                  /* preconfiguration */
-    ngx_aws_auth_req_init,                 /* postconfiguration */
+    ngx_http_aws_auth_req_init,                 /* postconfiguration */
 
     NULL,                                  /* create main configuration */
     NULL,                                  /* init main configuration */
@@ -109,11 +113,11 @@ ngx_http_aws_auth_create_loc_conf(ngx_conf_t *cf)
     ngx_http_aws_auth_conf_t  *conf;
 
     conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_aws_auth_conf_t));
-    conf->enabled = 0;
-    ngx_str_set(&conf->endpoint, "s3.amazonaws.com");
     if (conf == NULL) {
-        return NGX_CONF_ERROR;
+        return NULL;
     }
+
+    conf->enable = NGX_CONF_UNSET;
 
     return conf;
 }
@@ -151,12 +155,12 @@ ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 
 static ngx_int_t
-ngx_http_aws_proxy_sign(ngx_http_request_t *r)
+ngx_http_aws_auth_sign(ngx_http_request_t *r)
 {
     ngx_http_aws_auth_conf_t *conf = ngx_http_get_module_loc_conf(r,
         ngx_http_aws_auth_module);
-    if(!conf->enabled) {
-        /* return directly if module is not enabled */
+    if(!conf->enable) {
+        /* return directly if module is not enable */
         return NGX_DECLINED;
     }
     ngx_table_elt_t  *h;
@@ -168,7 +172,7 @@ ngx_http_aws_proxy_sign(ngx_http_request_t *r)
         return NGX_DECLINED;
     }
 
-    const ngx_array_t* headers_out = ngx_aws_auth__sign(r->pool, r,
+    const ngx_array_t* headers_out = ngx_http_aws_auth__sign(r->pool, r,
         &conf->access_key, &conf->signing_key_decoded,&conf->key_scope,
         &conf->bucket_name, &conf->endpoint);
 
@@ -201,7 +205,7 @@ ngx_http_aws_proxy_sign(ngx_http_request_t *r)
 
 
 static char *
-ngx_http_aws_endpoint(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ngx_http_aws_auth_endpoint(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     char *p = conf;
 
@@ -217,25 +221,8 @@ ngx_http_aws_endpoint(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 }
 
 
-static char *
-ngx_http_aws_sign(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
-{
-    /*
-    ngx_http_core_loc_conf_t  *clcf;
-
-    clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
-    clcf->handler = ngx_http_aws_proxy_sign;
-    */
-    ngx_http_aws_auth_conf_t *mconf = ngx_http_conf_get_module_loc_conf(cf,
-        ngx_http_aws_auth_module);
-    mconf->enabled = 1;
-
-    return NGX_CONF_OK;
-}
-
-
 static ngx_int_t
-ngx_aws_auth_req_init(ngx_conf_t *cf)
+ngx_http_aws_auth_req_init(ngx_conf_t *cf)
 {
     ngx_http_handler_pt        *h;
     ngx_http_core_main_conf_t  *cmcf;
@@ -247,7 +234,7 @@ ngx_aws_auth_req_init(ngx_conf_t *cf)
         return NGX_ERROR;
     }
 
-    *h = ngx_http_aws_proxy_sign;
+    *h = ngx_http_aws_auth_sign;
 
     return NGX_OK;
 }
