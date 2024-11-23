@@ -18,8 +18,8 @@
 static const EVP_MD* evp_md = NULL;
 
 
-ngx_str_t* ngx_http_aws_auth__sign_sha256(ngx_http_request_t *r, const ngx_str_t *blob,
-    const ngx_str_t *signing_key)
+ngx_str_t* ngx_http_aws_auth__sign_sha256(ngx_http_request_t *r,
+    const ngx_str_t *blob, const ngx_str_t *signing_key)
 {
     unsigned int      md_len;
     unsigned char     md[EVP_MAX_MD_SIZE];
@@ -29,7 +29,8 @@ ngx_str_t* ngx_http_aws_auth__sign_sha256(ngx_http_request_t *r, const ngx_str_t
         evp_md = EVP_sha256();
     }
 
-    HMAC(evp_md, signing_key->data, signing_key->len, blob->data, blob->len, md, &md_len);
+    HMAC(evp_md, signing_key->data, signing_key->len, blob->data, blob->len,
+         md, &md_len);
     retval->data = ngx_palloc(r->pool, md_len);
     retval->len = md_len;
     ngx_memcpy(retval->data, md, md_len);
@@ -38,8 +39,8 @@ ngx_str_t* ngx_http_aws_auth__sign_sha256(ngx_http_request_t *r, const ngx_str_t
 }
 
 
-ngx_str_t* ngx_http_aws_auth__sign_sha256_hex(ngx_http_request_t *r, const ngx_str_t *blob,
-    const ngx_str_t *signing_key)
+ngx_str_t* ngx_http_aws_auth__sign_sha256_hex(ngx_http_request_t *r,
+    const ngx_str_t *blob, const ngx_str_t *signing_key)
 {
 
     unsigned int      md_len;
@@ -50,7 +51,8 @@ ngx_str_t* ngx_http_aws_auth__sign_sha256_hex(ngx_http_request_t *r, const ngx_s
        evp_md = EVP_sha256();
     }
 
-    HMAC(evp_md, signing_key->data, signing_key->len, blob->data, blob->len, md, &md_len);
+    HMAC(evp_md, signing_key->data, signing_key->len, blob->data, blob->len,
+         md, &md_len);
     retval->data = ngx_palloc(r->pool, md_len * 2 + 1);
     retval->len = md_len * 2;
     ngx_hex_dump(retval->data, md, md_len);
@@ -58,7 +60,8 @@ ngx_str_t* ngx_http_aws_auth__sign_sha256_hex(ngx_http_request_t *r, const ngx_s
 }
 
 
-ngx_str_t* ngx_http_aws_auth__hash_sha256(ngx_http_request_t *r, const ngx_str_t *blob)
+ngx_str_t* ngx_http_aws_auth__hash_sha256(ngx_http_request_t *r,
+    const ngx_str_t *blob)
 {
     unsigned char hash[EVP_MAX_MD_SIZE];
     unsigned int hash_len;
