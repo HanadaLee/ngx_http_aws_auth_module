@@ -523,13 +523,13 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "making cononical request");
 
-    args.data = NULL;
+    path.data = (u_char *)"";
+    path.len = 0;
+
+    args.data = (u_char *)"";
     args.len = 0;
 
-    if (uri->len == 0) {
-        path.data = NULL;
-        path.len = 0;
-    } else {
+    if (uri != NULL && uri->len > 0) {
         path.data = uri->data;
         path.len = uri->len;
 
