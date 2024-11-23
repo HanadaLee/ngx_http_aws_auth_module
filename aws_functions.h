@@ -466,31 +466,31 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
                 canon_headers->signed_header_names->len + 1 + // Signed Headers + '\n'
                 request_body_hash->len; // Hashed Payload
 
-    retval->canon_request = ngx_palloc(r->pool, sizeof(ngx_str_t));
-    if (retval->canon_request == NULL) {
+    retval.canon_request = ngx_palloc(r->pool, sizeof(ngx_str_t));
+    if (retval.canon_request == NULL) {
         safe_ngx_log_error(r, "failed to allocate memory for canon_request");
         return NULL;
     }
 
-    retval->canon_request->data = ngx_palloc(r->pool, total_len);
-    if (retval->canon_request->data == NULL) {
+    retval.canon_request->data = ngx_palloc(r->pool, total_len);
+    if (retval.canon_request->data == NULL) {
         safe_ngx_log_error(r, "failed to allocate memory for "
                            "canon_request->data");
         return NULL;
     }
 
-    retval->canon_request->len = total_len;
+    retval.canon_request->len = total_len;
 
-    p = ngx_snprintf(retval->canon_request->data,
-                     retval->canon_request->len,
+    p = ngx_snprintf(retval.canon_request->data,
+                     retval.canon_request->len,
                      "%V\n%V\n%V\n%V\n%V\n%V",
                      http_method, url, canon_qs,
                      canon_headers->canon_header_str,
                      canon_headers->signed_header_names,
                      request_body_hash);
 
-    retval->canon_request->len = p - retval->canon_request->data;
-    retval->header_list = canon_headers->header_list;
+    retval.canon_request->len = p - retval.canon_request->data;
+    retval.header_list = canon_headers->header_list;
 
     safe_ngx_log_info(r, "canonical request is %V", retval.canon_request);
 
