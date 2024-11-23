@@ -202,7 +202,9 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
         ngx_http_aws_auth_module);
     ngx_table_elt_t          *h;
     header_pair_t            *hv;
-    ngx_uint_t                i;
+    ngx_uint_t                i, j;
+    ngx_list_part_t          *part = &r->headers_in.headers.part;
+    ngx_table_elt_t          *headers = part->elts;
 
     if(!conf->enable) {
         /* return directly if module is not enable */
@@ -231,6 +233,55 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
         &conf->access_key, &conf->signing_key_decoded, &conf->key_scope,
         &conf->secret_key, &conf->region, &conf->bucket, &conf->endpoint,
         &conf->convert_head);
+
+    for ( /* void */ ; part != NULL; part = part->next) {
+        for (i = 0; i < part->nelts; i++) {
+            /* Check Authorization header */
+            if (headers[i].hash != 0 &&
+                headers[i].key.len == AUTHZ_HEADER.len &&
+                ngx_strcasecmp(headers[i].key.data, AUTHZ_HEADER.data) == 0)
+            {
+                /* Remove Authorization header */
+                for (j = i; j < part->nelts - 1; j++) {
+                    headers[j] = headers[j + 1];
+                }
+                part->nelts--;
+                i--;
+                continue;
+            }
+
+            /* Check X-Amz-Date header */
+            if (headers[i].hash != 0 &&
+                headers[i].key.len == AMZ_DATE_HEADER.len &&
+                ngx_strcasecmp(headers[i].key.data, AMZ_DATE_HEADER.data) == 0)
+            {
+                /* Remove X-Amz-Date header */
+                for (j = i; j < part->nelts - 1; j++) {
+                    headers[j] = headers[j + 1];
+                }
+                part->nelts--;
+                i--;
+                continue;
+            }
+
+            /* Check X-Amz-Content-Sha256 header */
+            if (headers[i].hash != 0 &&
+                headers[i].key.len == AMZ_HASH_HEADER.len &&
+                ngx_strcasecmp(headers[i].key.data, AMZ_HASH_HEADER.data) == 0)
+            {
+                /* Remove X-Amz-Content-Sha256 header */
+                for (j = i; j < part->nelts - 1; j++) {
+                    headers[j] = headers[j + 1];
+                }
+                part->nelts--;
+                i--;
+                continue;
+            }
+
+            /* Do not change host header here, let's handle this in the proxy module */
+
+        }
+    }
 
     for (i = 0; i < headers_out->nelts; i++) {
         hv = (header_pair_t*)((u_char *) headers_out->elts
