@@ -56,11 +56,15 @@ struct AwsSignedRequestDetails {
 
 // mainly useful to avoid having to full instantiate request structures for
 // tests...
-#define safe_ngx_log_error(r, ...)                                      \
-    if (r->connection) {                                                \
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, __VA_ARGS__); \
+#define safe_ngx_log_error(r, ...)                                       \
+    if (r->connection) {                                                 \
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, __VA_ARGS__);  \
     }
 
+#define safe_ngx_log_info(r, ...)                                        \
+    if (r->connection) {                                                 \
+        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, __VA_ARGS__); \
+    }
 
 static const ngx_str_t EMPTY_STRING_SHA256 =
     ngx_string("e3b0c44298fc1c149afbf4c8996fb92"
@@ -127,8 +131,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
 
     ngx_str_t *retval = ngx_palloc(r->pool, sizeof(ngx_str_t));
     if (retval == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-        "failed to allocate memory for retval");
+        safe_ngx_log_error(r, "failed to allocate memory for retval");
         return &EMPTY_STRING;
     }
 
@@ -136,8 +139,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
     ngx_array_t *query_string_args = ngx_array_create(r->pool,
         1, sizeof(header_pair_t));
     if (query_string_args == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-        "failed to create query_string_args array");
+        safe_ngx_log_error(r, "failed to create query_string_args array");
         return &EMPTY_STRING;
     }
 
@@ -161,7 +163,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
         if (len > 0) {
             qs_arg->key.data = ngx_palloc(r->pool, len * 3);
             if (qs_arg->key.data == NULL) {
-                ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "failed to allocate memory for qs_arg->key.data");
+                safe_ngx_log_error(r, "failed to allocate memory for qs_arg->key.data");
                 return &EMPTY_STRING;
             }
             qs_arg->key.len = (u_char *)ngx_escape_uri(qs_arg->key.data,
@@ -174,7 +176,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
         if (len > 0) {
             qs_arg->value.data = ngx_palloc(r->pool, len * 3);
             if (qs_arg->key.data == NULL) {
-                ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "failed to allocate memory for qs_arg->key.data");
+                safe_ngx_log_error(r, "failed to allocate memory for qs_arg->key.data");
                 return &EMPTY_STRING;
             }
             qs_arg->value.len = (u_char *)ngx_escape_uri(qs_arg->value.data,
@@ -203,7 +205,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
 
     retval->data = ngx_palloc(r->pool, total_len);
     if (retval->data == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "Failed to allocate memory for retval->data");
+        safe_ngx_log_error(r, "failed to allocate memory for retval->data");
         return &EMPTY_STRING;
     }
     retval->len = 0;
@@ -232,7 +234,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
 
     retval->len--;
 
-    safe_ngx_log_error(r, "canonical qs constructed is %V", retval);
+    safe_ngx_log_info(r, "canonical qs constructed is %V", retval);
 
     return retval;
 }
@@ -417,12 +419,12 @@ ngx_http_aws_auth__canon_url(ngx_http_request_t *r)
     ngx_memcpy(retval->data, uri_data, uri_len);
     retval->len = uri_len;
 
-    safe_ngx_log_error(r, "canonical url extracted before "
+    safe_ngx_log_info(r, "canonical url extracted before "
         "uri encoding is %V", retval);
 
     // then URI-encode it per RFC 3986
     ngx_http_aws_auth__escape_uri(r, retval);
-    safe_ngx_log_error(r, "canonical url extracted after "
+    safe_ngx_log_info(r, "canonical url extracted after "
         "uri encoding is %V", retval);
 
     return retval;
@@ -435,6 +437,8 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
     const ngx_flag_t *convert_head)
 {
     struct AwsCanonicalRequestDetails retval;
+    size_t                            total_len;
+    u_char                            *p;
 
     // canonize query string
     const ngx_str_t *canon_qs = ngx_http_aws_auth__canonize_query_string(r);
@@ -456,19 +460,24 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
 
     const ngx_str_t *url = ngx_http_aws_auth__canon_url(r);
 
-    retval.canon_request = ngx_palloc(r->pool, sizeof(ngx_str_t));
-    retval.canon_request->len = 10000;
-    retval.canon_request->data = ngx_palloc(r->pool,
-        retval.canon_request->len);
+    total_len = http_method->len + 1 + url->len + 1 + // HTTP_METHOD + '\n' + URL + '\n'
+                canon_qs->len + 1 + // Canonical Query String + '\n'
+                canon_headers->canon_header_str.len + 1 + // Canonical Headers + '\n'
+                canon_headers->signed_header_names.len + 1 + // Signed Headers + '\n'
+                request_body_hash->len;
 
-    retval.canon_request->len = ngx_snprintf(retval.canon_request->data,
+    retval.canon_request = ngx_palloc(r->pool, sizeof(ngx_str_t));
+    retval.canon_request->data = ngx_palloc(r->pool, total_len);
+
+    p = ngx_snprintf(retval.canon_request->data,
         retval.canon_request->len, "%V\n%V\n%V\n%V\n%V\n%V",
         http_method, url, canon_qs, canon_headers.canon_header_str,
-        canon_headers.signed_header_names, request_body_hash)
-        - retval.canon_request->data;
+        canon_headers.signed_header_names, request_body_hash);
+
+    retval->canon_request.len = p - retval->canon_request.data;
     retval.header_list = canon_headers.header_list;
 
-    safe_ngx_log_error(r, "canonical request is %V", retval.canon_request);
+    safe_ngx_log_info(r, "canonical request is %V", retval.canon_request);
 
     return retval;
 }
@@ -572,9 +581,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
 
     key_scope->data = ngx_pnalloc(r->pool, key_scope_len + 1);
     if (key_scope->data == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: failed to allocate memory "
-                      "for key_scope");
+        safe_ngx_log_error(r, "generate_signing_key: failed to "
+                           "allocate memory for key_scope");
         return NGX_ERROR;
     }
 
@@ -589,9 +597,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
     size_t k_secret_len = 4 + secret_key->len;
     u_char *k_secret = ngx_pnalloc(r->pool, k_secret_len);
     if (k_secret == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: failed to allocate memory "
-                      "for k_secret");
+        safe_ngx_log_error(r, "generate_signing_key: failed to "
+                           "allocate memory for k_secret");
         return NGX_ERROR;
     }
 
@@ -620,8 +627,7 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
         &data_to_sign_date, &current_key);
 
     if (kDate == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: HMAC_SHA256 failed "
+        safe_ngx_log_error(r, "generate_signing_key: HMAC_SHA256 failed "
                       "at step kDate");
         return NGX_ERROR;
     }
@@ -633,8 +639,7 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
     ngx_str_t *k_region = ngx_http_aws_auth__sign_sha256(r,
         &data_to_sign_region, kDate);
     if (k_region == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: HMAC_SHA256 failed "
+        safe_ngx_log_error(r, "generate_signing_key: HMAC_SHA256 failed "
                       "at step k_region");
         return NGX_ERROR;
     }
@@ -646,8 +651,7 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
     ngx_str_t *k_service = ngx_http_aws_auth__sign_sha256(r,
         &data_to_sign_service, k_region);
     if (k_service == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: HMAC_SHA256 failed "
+        safe_ngx_log_error(r, "generate_signing_key: HMAC_SHA256 failed "
                       "at step k_service");
         return NGX_ERROR;
     }
@@ -659,8 +663,7 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
     ngx_str_t *k_signing  = ngx_http_aws_auth__sign_sha256(r,
         &data_to_sign_request, k_service);
     if (k_signing  == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: HMAC_SHA256 failed "
+        safe_ngx_log_error(r, "generate_signing_key: HMAC_SHA256 failed "
                       "at step k_signing ");
         return NGX_ERROR;
     }
@@ -670,9 +673,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
 
     signature_key->data = ngx_pnalloc(r->pool, k_signing ->len);
     if (signature_key->data == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "generate_signing_key: failed to allocate memory "
-                      "for signature_key");
+        safe_ngx_log_error(r, "generate_signing_key: failed to "
+                           "allocate memory for signature_key");
         return NGX_ERROR;
     }
 
@@ -716,16 +718,15 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
 
     if (bucket->len == 0) {
         if (ngx_http_complex_value(r, host, &compiled_host) != NGX_OK) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                          "failed to compile host complex value");
+            safe_ngx_log_error(r, "failed to compile host complex value");
             return NULL;
         }
     } else {
         size_t host_len = bucket->len + 1 + endpoint->len;
         compiled_host.data = ngx_pnalloc(r->pool, host_len);
         if (compiled_host.data == NULL) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                          "failed to allocate memory for compiled_host");
+            safe_ngx_log_error(r, "failed to allocate memory for "
+                               "compiled_host");
             return NULL;
         }
         compiled_host.len = ngx_snprintf(compiled_host.data, host_len,
