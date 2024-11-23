@@ -256,7 +256,7 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
     const ngx_array_t* headers_out = ngx_http_aws_auth__sign(r,
         &conf->access_key, &conf->signing_key_decoded, &conf->key_scope,
         &conf->secret_key, &conf->region, &conf->bucket, &conf->endpoint,
-        &conf->host, &conf->convert_head);
+        conf->host, &conf->convert_head);
 
     for ( /* void */ ; part != NULL; part = part->next) {
         for (i = 0; i < part->nelts; i++) {
