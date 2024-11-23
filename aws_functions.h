@@ -821,6 +821,9 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
         used_key_scope = &local_key_scope;
     }
 
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "generating aws host");
+
     if (bucket->len == 0) {
         if (host == NULL) {
             safe_ngx_log_error(r, "host is not set");
@@ -842,6 +845,9 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
             "%V.%V", bucket, endpoint) - compiled_host.data;
     }
 
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "generating uri");
+
     if (uri != NULL) {
         if (ngx_http_complex_value(r, uri, &compiled_uri) != NGX_OK) {
             safe_ngx_log_error(r, "failed to compile uri complex value");
@@ -854,6 +860,9 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
             compiled_uri.data = (u_char *)"";
         }
     }
+
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "computing aws signature");
 
     const struct AwsSignedRequestDetails signature_details =
         ngx_http_aws_auth__compute_signature(r,
