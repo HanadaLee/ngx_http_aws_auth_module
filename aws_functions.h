@@ -119,7 +119,7 @@ ngx_http_aws_auth__cmp_hnames(const void *one, const void *two)
 }
 
 
-static inline const ngx_int_t
+static inline ngx_int_t
 ngx_http_aws_auth__is_already_encoded(u_char *data, size_t len)
 {
     size_t i;
