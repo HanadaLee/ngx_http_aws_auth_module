@@ -520,22 +520,25 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
     const ngx_str_t                  *canon_qs;
     const ngx_str_t                  *canon_uri;
 
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "making cononical request");
+
+    args.data = NULL;
+    args.len = 0;
+
     if (uri->len == 0) {
         path.data = NULL;
         path.len = 0;
     } else {
         path.data = uri->data;
         path.len = uri->len;
-    }
 
-    args.data = NULL;
-    args.len = 0;
-
-    question_mark = ngx_strlchr(uri->data, uri->data + uri->len, '?');
-    if (question_mark != NULL) {
-        path.len = question_mark - uri->data;
-        args.data = question_mark + 1;
-        args.len = uri->len - path.len - 1;
+        question_mark = ngx_strlchr(uri->data, uri->data + uri->len, '?');
+        if (question_mark != NULL) {
+            path.len = question_mark - uri->data;
+            args.data = question_mark + 1;
+            args.len = uri->len - path.len - 1;
+        }
     }
 
     // canonize query string
