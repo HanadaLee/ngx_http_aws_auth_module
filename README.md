@@ -18,13 +18,12 @@ Implements proxying of authenticated requests to S3.
   server {
     listen     8000;
 
-    aws_access_key your_aws_access_key; # Example AKIDEXAMPLE
-    aws_key_scope scope_of_generated_signing_key; #Example 20150830/us-east-1/service/aws4_request
-    aws_signing_key signing_key_generated_using_script; #Example L4vRLWAO92X5L3Sqk5QydUSdB0nC9+1wfqLMOKLbRp4=
-    aws_s3_bucket your_s3_bucket;
-
     location / {
-      aws_sign;
+      aws_auth on;
+      aws_auth_access_key your_aws_access_key; # Example AKIDEXAMPLE
+      aws_auth_key_scope scope_of_generated_signing_key; #Example 20150830/us-east-1/service/aws4_request
+      aws_auth_signing_key signing_key_generated_using_script; #Example L4vRLWAO92X5L3Sqk5QydUSdB0nC9+1wfqLMOKLbRp4=
+      aws_auth_bucket your_s3_bucket;
       proxy_pass http://your_s3_bucket.s3.amazonaws.com;
     }
 
@@ -34,9 +33,10 @@ Implements proxying of authenticated requests to S3.
       rewrite /myfiles/(.*) /$1 break;
       proxy_pass http://your_s3_bucket.s3.amazonaws.com/$1;
 
-      aws_access_key your_aws_access_key;
-      aws_key_scope scope_of_generated_signing_key;
-      aws_signing_key signing_key_generated_using_script;
+      aws_auth_access_key your_aws_access_key;
+      aws_auth_key_scope scope_of_generated_signing_key;
+      aws_auth_signing_key signing_key_generated_using_script;
+      aws_auth_bucket your_s3_bucket;
     }
 
     # This is an example that use specific s3 endpoint, default endpoint is s3.amazonaws.com
@@ -45,11 +45,38 @@ Implements proxying of authenticated requests to S3.
       rewrite /s3_beijing/(.*) /$1 break;
       proxy_pass http://your_s3_bucket.s3.cn-north-1.amazonaws.com.cn/$1;
 
-      aws_sign;
-      aws_endpoint "s3.cn-north-1.amazonaws.com.cn";
-      aws_access_key your_aws_access_key;
-      aws_key_scope scope_of_generated_signing_key;
-      aws_signing_key signing_key_generated_using_script;
+      aws_auth on;
+      aws_auth_endpoint s3.cn-north-1.amazonaws.com.cn;
+      aws_auth_access_key your_aws_access_key;
+      aws_auth_key_scope scope_of_generated_signing_key;
+      aws_auth_signing_key signing_key_generated_using_script;
+      aws_auth_bucket your_s3_bucket;
+    }
+
+    # This is an example that specific upstream host and uri
+    # Be careful not to use aws_auth_host and aws_auth_bucket + aws_auth_endpoint at the same time, aws_auth_bucket + aws_auth_endpoint will have higher priority.
+    location /s3_beijing_2 {
+      set $upstream_host your_s3_bucket.s3.cn-north-1.amazonaws.com.cn;
+      set $upstream_uri /test.txt;
+      proxy_pass http://$upstream_host$upstream_uri;
+      aws_auth on;
+      aws_auth_host $upstream_host;
+      aws_auth_uri $upstream_uri;
+      aws_auth_access_key your_aws_access_key;
+      aws_auth_key_scope scope_of_generated_signing_key;
+      aws_auth_signing_key signing_key_generated_using_script;
+    }
+
+    # Security warning: Placing the secret key in the nginx configuration is unsafe. Please give priority to using the script mentioned below to generate and regularly update the signing key. Only use this solution as a last resort.
+    # This is an example that automatically calculate signing_key and key_scope
+    location /s3_beijing_3 {
+      aws_auth on;
+      aws_auth_access_key your_aws_access_key; # Example AKIDEXAMPLE
+      aws_auth_secret_key your_aws_secret_key; # Example LTAxxxxxxxx
+      aws_auth_region cn-north-1;
+      aws_auth_endpoint s3.cn-north-1.amazonaws.com.cn;
+      aws_auth_bucket your_s3_bucket;
+      proxy_pass http://your_s3_bucket.s3.amazonaws.com;
     }
   }
 ```
