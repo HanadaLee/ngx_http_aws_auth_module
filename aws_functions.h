@@ -438,7 +438,7 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
 {
     struct AwsCanonicalRequestDetails retval;
     size_t                            total_len;
-    u_char                            *p;
+    u_char                           *p;
 
     // canonize query string
     const ngx_str_t *canon_qs = ngx_http_aws_auth__canonize_query_string(r);
@@ -460,14 +460,22 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
 
     const ngx_str_t *url = ngx_http_aws_auth__canon_url(r);
 
-	retval.canon_request = ngx_palloc(pool, sizeof(ngx_str_t));
-	retval.canon_request->len = 10000;
-	retval.canon_request->data = ngx_palloc(pool, retval.canon_request->len);
+    total_len = http_method->len + url->len + canon_qs->len
+        + canon_headers.canon_header_str->len
+        + canon_headers.signed_header_names->len
+        + request_body_hash->len + 5;
 
-	retval.canon_request->len = ngx_snprintf(retval.canon_request->data, retval.canon_request->len, "%V\n%V\n%V\n%V\n%V\n%V",
-		http_method, url, canon_qs, canon_headers.canon_header_str,
-		canon_headers.signed_header_names, request_body_hash) - retval.canon_request->data;
-	retval.header_list = canon_headers.header_list;
+    retval.canon_request = ngx_palloc(r->pool, sizeof(ngx_str_t));
+    retval.canon_request->data = ngx_palloc(r->pool, total_len);
+
+    p = retval.canon_request->data;
+    p = ngx_snprintf(p, total_len, "%V\n%V\n%V\n%V\n%V\n%V",
+        http_method, url, canon_qs, canon_headers.canon_header_str,
+        canon_headers.signed_header_names, request_body_hash);
+
+    retval.canon_request->len = p - retval.canon_request->data;
+
+    retval.header_list = canon_headers.header_list;
 
     safe_ngx_log_info(r, "canonical request is %V", retval.canon_request);
 
