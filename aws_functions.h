@@ -107,7 +107,7 @@ ngx_http_aws_auth__cmp_hnames(const void *one, const void *two)
     second = (header_pair_t *) two;
     ret = ngx_strncmp(first->key.data, second->key.data,
                       ngx_min(first->key.len, second->key.len));
-    if (ret != 0){
+    if (ret != 0) {
         return ret;
     } else {
         return (first->key.len - second->key.len);
@@ -153,7 +153,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
 
 
         len = ampersand - equal;
-        if(len > 0 ) {
+        if (len > 0 ) {
             qs_arg->value.data = ngx_palloc(r->pool, len * 3);
             qs_arg->value.len = (u_char *)ngx_escape_uri(qs_arg->value.data,
                  equal + 1, len - 1, NGX_ESCAPE_ARGS) - qs_arg->value.data;
@@ -198,16 +198,16 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
 
 static inline const ngx_str_t*
 ngx_http_aws_auth__host_from_bucket(ngx_http_request_t *r,
-    const ngx_str_t *s3_bucket)
+    const ngx_str_t *bucket)
 {
     static const char HOST_PATTERN[] = ".s3.amazonaws.com";
     ngx_str_t *host;
 
     host = ngx_palloc(r->pool, sizeof(ngx_str_t));
-    host->len = s3_bucket->len + sizeof(HOST_PATTERN) + 1;
+    host->len = bucket->len + sizeof(HOST_PATTERN) + 1;
     host->data = ngx_palloc(r->pool, host->len);
     host->len = ngx_snprintf(host->data, host->len, "%V%s",
-        s3_bucket, HOST_PATTERN) - host->data;
+        bucket, HOST_PATTERN) - host->data;
 
     return host;
 }
@@ -215,9 +215,8 @@ ngx_http_aws_auth__host_from_bucket(ngx_http_request_t *r,
 
 static inline struct AwsCanonicalHeaderDetails
 ngx_http_aws_auth__canonize_headers(ngx_http_request_t *r,
-    const ngx_str_t *s3_bucket, const ngx_str_t *amz_date,
-    const ngx_str_t *content_hash,
-    const ngx_str_t *s3_endpoint)
+    const ngx_str_t *host, const ngx_str_t *amz_date,
+    const ngx_str_t *content_hash)
 {
     size_t header_names_size = 1, header_nameval_size = 1;
     size_t i, used;
@@ -238,11 +237,7 @@ ngx_http_aws_auth__canonize_headers(ngx_http_request_t *r,
 
     header_ptr = ngx_array_push(settable_header_array);
     header_ptr->key = HOST_HEADER;
-    header_ptr->value.len = s3_bucket->len + s3_endpoint->len + 2;
-    header_ptr->value.data = ngx_palloc(r->pool, header_ptr->value.len);
-    header_ptr->value.len = ngx_snprintf(header_ptr->value.data,
-        header_ptr->value.len, "%V.%V", s3_bucket, s3_endpoint)
-        - header_ptr->value.data;
+    header_ptr->value = *host;
 
     ngx_qsort(settable_header_array->elts,
               (size_t) settable_header_array->nelts, sizeof(header_pair_t),
@@ -366,7 +361,7 @@ ngx_http_aws_auth__canon_url(ngx_http_request_t *r)
     const u_char *uri_data;
     u_int uri_len;
 
-    if(r->args.len == 0) {
+    if (r->args.len == 0) {
         uri_data = r->uri.data;
         uri_len = r->uri.len;
     } else {
@@ -394,8 +389,8 @@ ngx_http_aws_auth__canon_url(ngx_http_request_t *r)
 
 static inline struct AwsCanonicalRequestDetails
 ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
-    const ngx_str_t *s3_bucket_name, const ngx_str_t *amz_date,
-    const ngx_str_t *s3_endpoint, const ngx_flag_t *convert_head)
+    const ngx_str_t *host, const ngx_str_t *amz_date,
+    const ngx_flag_t *convert_head)
 {
     struct AwsCanonicalRequestDetails retval;
 
@@ -407,8 +402,8 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
         ngx_http_aws_auth__request_body_hash(r);
 
     const struct AwsCanonicalHeaderDetails canon_headers =
-        ngx_http_aws_auth__canonize_headers(r, s3_bucket_name, amz_date,
-            request_body_hash, s3_endpoint);
+        ngx_http_aws_auth__canonize_headers(r,
+            host, amz_date, request_body_hash);
     retval.signed_header_names = canon_headers.signed_header_names;
 
     const ngx_str_t *http_method = &(r->method_name);
@@ -477,16 +472,14 @@ ngx_http_aws_auth__make_auth_token(ngx_http_request_t *r,
 static inline struct AwsSignedRequestDetails
 ngx_http_aws_auth__compute_signature(ngx_http_request_t *r,
     const ngx_str_t *signing_key, const ngx_str_t *key_scope,
-    const ngx_str_t *s3_bucket_name, const ngx_str_t *s3_endpoint,
-    const ngx_flag_t *convert_head)
+    const ngx_str_t *host, const ngx_flag_t *convert_head)
 {
     struct AwsSignedRequestDetails retval;
 
     const ngx_str_t *date =
         ngx_http_aws_auth__compute_request_time(r, &r->start_sec);
     const struct AwsCanonicalRequestDetails canon_request =
-        ngx_http_aws_auth__make_canonical_request(r, s3_bucket_name, date,
-            s3_endpoint, convert_head);
+        ngx_http_aws_auth__make_canonical_request(r, host, date, convert_head);
     const ngx_str_t *canon_request_hash = ngx_http_aws_auth__hash_sha256(r,
         canon_request.canon_request);
 
@@ -551,21 +544,21 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generate_signing_key: key_scope=%V", key_scope);
 
-    size_t kSecret_len = 4 + secret_key->len;
-    u_char *kSecret = ngx_pnalloc(r->pool, kSecret_len);
-    if (kSecret == NULL) {
+    size_t k_secret_len = 4 + secret_key->len;
+    u_char *k_secret = ngx_pnalloc(r->pool, k_secret_len);
+    if (k_secret == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "generate_signing_key: failed to allocate memory "
-                      "for kSecret");
+                      "for k_secret");
         return NGX_ERROR;
     }
 
-    ngx_memcpy(kSecret, "AWS4", 4);
-    ngx_memcpy(kSecret + 4, secret_key->data, secret_key->len);
+    ngx_memcpy(k_secret, "AWS4", 4);
+    ngx_memcpy(k_secret + 4, secret_key->data, secret_key->len);
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "generate_signing_key: kSecret prepared (length=%uz)",
-                   kSecret_len);
+                   "generate_signing_key: k_secret prepared (length=%uz)",
+                   k_secret_len);
 
     ngx_str_t data_to_sign_date = {8, date_stamp}; // date_stamp
     ngx_str_t data_to_sign_region = *region;        // region
@@ -573,8 +566,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
     ngx_str_t data_to_sign_request = aws4_request;  // "aws4_request"
 
     ngx_str_t current_key;
-    current_key.data = kSecret;
-    current_key.len = kSecret_len;
+    current_key.data = k_secret;
+    current_key.len = k_secret_len;
 
     // starting HMAC calculations
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -594,46 +587,46 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
                    "generate_signing_key: kDate computed (len=%uz)",
                    kDate->len);
 
-    // Step 2: kRegion = HMAC_SHA256(kDate, region)
-    ngx_str_t *kRegion = ngx_http_aws_auth__sign_sha256(r,
+    // Step 2: k_region = HMAC_SHA256(kDate, region)
+    ngx_str_t *k_region = ngx_http_aws_auth__sign_sha256(r,
         &data_to_sign_region, kDate);
-    if (kRegion == NULL) {
+    if (k_region == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "generate_signing_key: HMAC_SHA256 failed "
-                      "at step kRegion");
+                      "at step k_region");
         return NGX_ERROR;
     }
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "generate_signing_key: kRegion computed (len=%uz)",
-                   kRegion->len);
+                   "generate_signing_key: k_region computed (len=%uz)",
+                   k_region->len);
 
-    // Step 3: kService = HMAC_SHA256(kRegion, service)
-    ngx_str_t *kService = ngx_http_aws_auth__sign_sha256(r,
-        &data_to_sign_service, kRegion);
-    if (kService == NULL) {
+    // Step 3: k_service = HMAC_SHA256(k_region, service)
+    ngx_str_t *k_service = ngx_http_aws_auth__sign_sha256(r,
+        &data_to_sign_service, k_region);
+    if (k_service == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "generate_signing_key: HMAC_SHA256 failed "
-                      "at step kService");
+                      "at step k_service");
         return NGX_ERROR;
     }
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "generate_signing_key: kService computed (len=%uz)",
-                   kService->len);
+                   "generate_signing_key: k_service computed (len=%uz)",
+                   k_service->len);
 
-    // Step 4: kSigning = HMAC_SHA256(kService, aws4_request)
-    ngx_str_t *kSigning = ngx_http_aws_auth__sign_sha256(r,
-        &data_to_sign_request, kService);
-    if (kSigning == NULL) {
+    // Step 4: k_signing  = HMAC_SHA256(k_service, aws4_request)
+    ngx_str_t *k_signing  = ngx_http_aws_auth__sign_sha256(r,
+        &data_to_sign_request, k_service);
+    if (k_signing  == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "generate_signing_key: HMAC_SHA256 failed "
-                      "at step kSigning");
+                      "at step k_signing ");
         return NGX_ERROR;
     }
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "generate_signing_key: kSigning computed (len=%uz)",
-                   kSigning->len);
+                   "generate_signing_key: k_signing  computed (len=%uz)",
+                   k_signing ->len);
 
-    signature_key->data = ngx_pnalloc(r->pool, kSigning->len);
+    signature_key->data = ngx_pnalloc(r->pool, k_signing ->len);
     if (signature_key->data == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "generate_signing_key: failed to allocate memory "
@@ -641,8 +634,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
         return NGX_ERROR;
     }
 
-    signature_key->len = kSigning->len;
-    ngx_memcpy(signature_key->data, kSigning->data, kSigning->len);
+    signature_key->len = k_signing ->len;
+    ngx_memcpy(signature_key->data, k_signing ->data, k_signing ->len);
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generate_signing_key: signature_key generated (len=%uz)",
@@ -657,13 +650,15 @@ static inline const ngx_array_t*
 ngx_http_aws_auth__sign(ngx_http_request_t *r,
     const ngx_str_t *access_key, const ngx_str_t *signing_key,
     const ngx_str_t *key_scope, const ngx_str_t *secret_key,
-    const ngx_str_t *region, const ngx_str_t *s3_bucket_name,
-    const ngx_str_t *s3_endpoint, const ngx_flag_t *convert_head)
+    const ngx_str_t *region, const ngx_str_t *bucket,
+    const ngx_str_t *endpoint, const ngx_http_complex_value_t *host,
+    const ngx_flag_t *convert_head)
 {
-    ngx_str_t local_signing_key;
-    ngx_str_t local_key_scope;
-    const ngx_str_t *used_signing_key = signing_key;
-    const ngx_str_t *used_key_scope = key_scope;
+    ngx_str_t         local_signing_key;
+    ngx_str_t         local_key_scope;
+    const ngx_str_t  *used_signing_key = signing_key;
+    const ngx_str_t  *used_key_scope = key_scope;
+    ngx_str_t         compiled_host;
 
     if (signing_key == NULL || signing_key->len == 0
         || signing_key->data == NULL) {
@@ -677,10 +672,28 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
         used_key_scope = &local_key_scope;
     }
 
+    if (bucket->len == 0) {
+        if (ngx_http_complex_value(r, host, &compiled_host) != NGX_OK) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                          "failed to compile host complex value");
+            return NGX_ERROR;
+        }
+    } else {
+        size_t host_len = bucket->len + 1 + endpoint->len;
+        compiled_host.data = ngx_pnalloc(r->pool, host_len);
+        if (compiled_host.data == NULL) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                          "failed to allocate memory for compiled_host");
+            return NGX_ERROR;
+        }
+        compiled_host.len = ngx_snprintf(compiled_host.data, host_len,
+            "%V.%V", bucket, endpoint) - compiled_host.data;
+    }
+
     const struct AwsSignedRequestDetails signature_details =
         ngx_http_aws_auth__compute_signature(r,
             used_signing_key, used_key_scope,
-            s3_bucket_name, s3_endpoint, convert_head);
+            &compiled_host, convert_head);
 
     const ngx_str_t *auth_header_value =
         ngx_http_aws_auth__make_auth_token(r, signature_details.signature,

@@ -75,16 +75,16 @@ ngx_str_t* ngx_http_aws_auth__hash_sha256(ngx_http_request_t *r,
         return NULL;
     }
 
-    if((mdctx = EVP_MD_CTX_create()) == NULL)
+    if ((mdctx = EVP_MD_CTX_create()) == NULL)
         return NULL;
 
-    if(1 != EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL))
+    if (1 != EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL))
         return NULL;
 
-    if(1 != EVP_DigestUpdate(mdctx, blob->data, blob->len))
+    if (1 != EVP_DigestUpdate(mdctx, blob->data, blob->len))
         return NULL;
 
-    if(1 != EVP_DigestFinal_ex(mdctx, hash, &hash_len))
+    if (1 != EVP_DigestFinal_ex(mdctx, hash, &hash_len))
         return NULL;
 
     EVP_MD_CTX_free(mdctx);

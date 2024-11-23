@@ -18,19 +18,22 @@ static ngx_int_t ngx_http_aws_auth_req_init(ngx_conf_t *cf);
 
 
 typedef struct {
-    ngx_flag_t     enable;
-    ngx_flag_t     convert_head;
+    ngx_flag_t                enable;
+    ngx_flag_t                convert_head;
 
-    ngx_array_t   *bypass;
+    ngx_array_t              *bypass;
 
-    ngx_str_t      access_key;
-    ngx_str_t      key_scope;
-    ngx_str_t      signing_key;
-    ngx_str_t      secret_key;
-    ngx_str_t      region;
-    ngx_str_t      signing_key_decoded;
-    ngx_str_t      endpoint;
-    ngx_str_t      bucket;
+    ngx_str_t                 access_key;
+    ngx_str_t                 key_scope;
+    ngx_str_t                 signing_key;
+    ngx_str_t                 secret_key;
+    ngx_str_t                 region;
+    ngx_str_t                 signing_key_decoded;
+    ngx_str_t                 endpoint;
+    ngx_str_t                 bucket;
+
+    ngx_http_complex_value_t *host;
+    ngx_http_complex_value_t *uri;
 } ngx_http_aws_auth_conf_t;
 
 
@@ -82,6 +85,20 @@ static ngx_command_t  ngx_http_aws_auth_commands[] = {
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aws_auth_conf_t, bucket),
+      NULL },
+
+    { ngx_string("aws_auth_host"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_http_set_complex_value_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aws_auth_conf_t, host),
+      NULL },
+
+    { ngx_string("aws_auth_uri"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_http_set_complex_value_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_aws_auth_conf_t, uri),
       NULL },
 
     { ngx_string("aws_auth_convert_head"),
@@ -154,6 +171,9 @@ ngx_http_aws_auth_create_loc_conf(ngx_conf_t *cf)
     conf->bypass = NGX_CONF_UNSET_PTR;
     conf->convert_head = NGX_CONF_UNSET;
 
+    conf->host = NGX_CONF_UNSET_PTR;
+    conf->uri = NGX_CONF_UNSET_PTR;
+
     return conf;
 }
 
@@ -177,18 +197,22 @@ ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_str_value(conf->bucket, prev->bucket, "");
 
     ngx_conf_merge_ptr_value(conf->bypass, prev->bypass, NULL);
+    ngx_conf_merge_ptr_value(conf->host, prev->host, NULL);
+    ngx_conf_merge_ptr_value(conf->uri, prev->uri, NULL);
 
-    if(conf->signing_key_decoded.data == NULL) {
-        conf->signing_key_decoded.data = ngx_pcalloc(cf->pool, 100);
-        if(conf->signing_key_decoded.data == NULL) {
-            return NGX_CONF_ERROR;
+    if (conf->signing_key.len != 0) {
+        if (conf->signing_key_decoded.data == NULL) {
+            conf->signing_key_decoded.data = ngx_pcalloc(cf->pool, 100);
+            if (conf->signing_key_decoded.data == NULL) {
+                return NGX_CONF_ERROR;
+            }
         }
-    }
 
-    if(conf->signing_key.len > 64) {
-        return NGX_CONF_ERROR;
-    } else {
-        ngx_decode_base64(&conf->signing_key_decoded, &conf->signing_key);
+        if (conf->signing_key.len > 64) {
+            return NGX_CONF_ERROR;
+        } else {
+            ngx_decode_base64(&conf->signing_key_decoded, &conf->signing_key);
+        }
     }
 
     return NGX_CONF_OK;
@@ -206,7 +230,7 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
     ngx_list_part_t          *part = &r->headers_in.headers.part;
     ngx_table_elt_t          *headers = part->elts;
 
-    if(!conf->enable) {
+    if (!conf->enable) {
         /* return directly if module is not enable */
         return NGX_DECLINED;
     }
@@ -289,7 +313,7 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
         ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                 "header name %s, value %s", hv->key.data, hv->value.data);
 
-        if(ngx_strncmp(hv->key.data, HOST_HEADER.data, hv->key.len) == 0) {
+        if (ngx_strncmp(hv->key.data, HOST_HEADER.data, hv->key.len) == 0) {
             /* host header is controlled by proxy pass directive and hence
                cannot be set by our module */
             continue;
