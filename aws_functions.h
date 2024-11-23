@@ -119,14 +119,25 @@ static inline const ngx_str_t*
 ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
 {
     u_char *p, *ampersand, *equal, *last;
-    size_t i, len;
+    size_t  i, len, total_len;
+
+    if (r->args.len == 0) {
+        return &EMPTY_STRING;
+    }
+
     ngx_str_t *retval = ngx_palloc(r->pool, sizeof(ngx_str_t));
+    if (retval == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+        "failed to allocate memory for retval");
+        return &EMPTY_STRING;
+    }
 
     header_pair_t *qs_arg;
     ngx_array_t *query_string_args = ngx_array_create(r->pool,
-        0, sizeof(header_pair_t));
-
-    if (r->args.len == 0) {
+        1, sizeof(header_pair_t));
+    if (query_string_args == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+        "failed to create query_string_args array");
         return &EMPTY_STRING;
     }
 
@@ -147,14 +158,25 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
         }
 
         len = equal - p;
-        qs_arg->key.data = ngx_palloc(r->pool, len * 3);
-        qs_arg->key.len = (u_char *)ngx_escape_uri(qs_arg->key.data,
-            p, len, NGX_ESCAPE_ARGS) - qs_arg->key.data;
-
+        if (len > 0) {
+            qs_arg->key.data = ngx_palloc(r->pool, len * 3);
+            if (qs_arg->key.data == NULL) {
+                ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "failed to allocate memory for qs_arg->key.data");
+                return &EMPTY_STRING;
+            }
+            qs_arg->key.len = (u_char *)ngx_escape_uri(qs_arg->key.data,
+                p, len, NGX_ESCAPE_ARGS) - qs_arg->key.data;
+        } else {
+            qs_arg->key = EMPTY_STRING;
+        }
 
         len = ampersand - equal;
-        if (len > 0 ) {
+        if (len > 0) {
             qs_arg->value.data = ngx_palloc(r->pool, len * 3);
+            if (qs_arg->key.data == NULL) {
+                ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "failed to allocate memory for qs_arg->key.data");
+                return &EMPTY_STRING;
+            }
             qs_arg->value.len = (u_char *)ngx_escape_uri(qs_arg->value.data,
                  equal + 1, len - 1, NGX_ESCAPE_ARGS) - qs_arg->value.data;
         } else {
@@ -164,14 +186,29 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
         p = ampersand;
     }
 
-    ngx_qsort(query_string_args->elts, (size_t) query_string_args->nelts,
-        sizeof(header_pair_t), ngx_http_aws_auth__cmp_hnames);
+    if (query_string_args->nelts > 0) {
+        ngx_qsort(query_string_args->elts, (size_t) query_string_args->nelts,
+            sizeof(header_pair_t), ngx_http_aws_auth__cmp_hnames);
+    }
 
-    retval->data = ngx_palloc(r->pool,
-        r->args.len * 3 + query_string_args->nelts * 2);
+    total_len = 0;
+    for (i = 0; i < query_string_args->nelts; i++) {
+        qs_arg = &((header_pair_t*)query_string_args->elts)[i];
+        total_len += qs_arg->key.len + 1 + qs_arg->value.len + 1; // key + '=' + value + '&'
+    }
+
+    if (query_string_args->nelts = 0) {
+        return &EMPTY_STRING;
+    }
+
+    retval->data = ngx_palloc(r->pool, total_len);
+    if (retval->data == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "Failed to allocate memory for retval->data");
+        return &EMPTY_STRING;
+    }
     retval->len = 0;
 
-    for(i = 0; i < query_string_args->nelts; i++) {
+    for (i = 0; i < query_string_args->nelts; i++) {
         qs_arg = &((header_pair_t*)query_string_args->elts)[i];
 
         ngx_memcpy(retval->data + retval->len,
@@ -188,6 +225,11 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
         *(retval->data + retval->len) = '&';
         retval->len++;
     }
+
+    if (retval->len = 0) {
+        return &EMPTY_STRING;
+    }
+
     retval->len--;
 
     safe_ngx_log_error(r, "canonical qs constructed is %V", retval);
@@ -244,7 +286,7 @@ ngx_http_aws_auth__canonize_headers(ngx_http_request_t *r,
               ngx_http_aws_auth__cmp_hnames);
     retval.header_list = settable_header_array;
 
-    for(i = 0; i < settable_header_array->nelts; i++) {
+    for (i = 0; i < settable_header_array->nelts; i++) {
         header_names_size +=
             ((header_pair_t*)settable_header_array->elts)[i].key.len + 1;
         header_nameval_size +=
@@ -257,7 +299,7 @@ ngx_http_aws_auth__canonize_headers(ngx_http_request_t *r,
     retval.canon_header_str = ngx_palloc(r->pool, sizeof(ngx_str_t));
     retval.canon_header_str->data = ngx_palloc(r->pool, header_nameval_size);
 
-    for(i = 0, used = 0, buf_progress = retval.canon_header_str->data;
+    for (i = 0, used = 0, buf_progress = retval.canon_header_str->data;
         i < settable_header_array->nelts;
         i++, used = buf_progress - retval.canon_header_str->data) {
         buf_progress = ngx_snprintf(buf_progress,
@@ -271,7 +313,7 @@ ngx_http_aws_auth__canonize_headers(ngx_http_request_t *r,
     retval.signed_header_names = ngx_palloc(r->pool, sizeof(ngx_str_t));
     retval.signed_header_names->data = ngx_palloc(r->pool, header_names_size);
 
-    for(i = 0, used = 0, buf_progress = retval.signed_header_names->data;
+    for (i = 0, used = 0, buf_progress = retval.signed_header_names->data;
         i < settable_header_array->nelts;
         i++, used = buf_progress - retval.signed_header_names->data) {
         buf_progress = ngx_snprintf(buf_progress,
