@@ -651,7 +651,7 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
     const ngx_str_t *access_key, const ngx_str_t *signing_key,
     const ngx_str_t *key_scope, const ngx_str_t *secret_key,
     const ngx_str_t *region, const ngx_str_t *bucket,
-    const ngx_str_t *endpoint, const ngx_http_complex_value_t *host,
+    const ngx_str_t *endpoint, ngx_http_complex_value_t *host,
     const ngx_flag_t *convert_head)
 {
     ngx_str_t         local_signing_key;
@@ -676,7 +676,7 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
         if (ngx_http_complex_value(r, host, &compiled_host) != NGX_OK) {
             ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                           "failed to compile host complex value");
-            return NGX_ERROR;
+            return NULL;
         }
     } else {
         size_t host_len = bucket->len + 1 + endpoint->len;
@@ -684,7 +684,7 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
         if (compiled_host.data == NULL) {
             ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                           "failed to allocate memory for compiled_host");
-            return NGX_ERROR;
+            return NULL;
         }
         compiled_host.len = ngx_snprintf(compiled_host.data, host_len,
             "%V.%V", bucket, endpoint) - compiled_host.data;
