@@ -7,6 +7,8 @@ This nginx module can proxy requests to authenticated S3 backends using Amazon's
 V4 authentication API. The first version of this module was written for the V2
 authentication protocol and can be found in the *AuthV2* branch.
 
+This fork changes the processing phase to NGX_HTTP_PRECONTENT_PHASE, so subrequests can also use this module to generate authentication headers normally. In addition, some instructions and functions are added according to actual usage needs.
+
 ## License
 This project uses the same license as ngnix does i.e. the 2 clause BSD / simplified BSD / FreeBSD license
 
@@ -17,6 +19,14 @@ Implements proxying of authenticated requests to S3.
 ```nginx
   server {
     listen     8000;
+
+    # aws_auth_convert_head is on by default.
+    # If you set `proxy_cache_convert_head` to off, or the `proxy_cache` function is not enabled, please also set `aws_auth_convert_head` to off. Otherwise, the HEAD request may be intercepted.
+    # proxy_cache_convert_head off;
+    # aws_auth_convert_head off;
+
+    # Determine whether to append an authentication header based on the values ​​of multiple variables.
+    # aws_auth_bypass $http_no_s3_auth $arg_no_s3_auth $cookie_no_s3_auth $http_authorization;
 
     location / {
       aws_auth on;
