@@ -12,8 +12,6 @@ static void* ngx_http_aws_auth_create_loc_conf(ngx_conf_t *cf);
 static char* ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf,
     void *parent, void *child);
 static ngx_int_t ngx_http_aws_auth_sign(ngx_http_request_t *r);
-static char * ngx_http_aws_auth_endpoint(ngx_conf_t *cf,
-    ngx_command_t *cmd, void *conf);
 static ngx_int_t ngx_http_aws_auth_req_init(ngx_conf_t *cf);
 
 
@@ -75,7 +73,7 @@ static ngx_command_t  ngx_http_aws_auth_commands[] = {
 
     { ngx_string("aws_auth_endpoint"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
-      ngx_http_aws_auth_endpoint,
+      ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_aws_auth_conf_t, endpoint),
       NULL },
@@ -331,22 +329,6 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
     }
 
     return NGX_OK;
-}
-
-
-static char *
-ngx_http_aws_auth_endpoint(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
-{
-    char      *p = conf;
-    ngx_str_t *field, *value;
-
-    field = (ngx_str_t *)(p + cmd->offset);
-
-    value = cf->args->elts;
-
-    *field = value[1];
-
-    return NGX_CONF_OK;
 }
 
 
