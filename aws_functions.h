@@ -150,6 +150,9 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
     u_char *p, *ampersand, *equal, *last;
     size_t  i, len, total_len;
 
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "canonizing query string");
+
     ngx_str_t *retval = ngx_palloc(r->pool, sizeof(ngx_str_t));
     if (retval == NULL) {
         safe_ngx_log_error(r, "failed to allocate memory for retval");
