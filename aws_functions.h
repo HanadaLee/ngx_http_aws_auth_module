@@ -562,7 +562,7 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
     }
 
     // canonize uri
-    const ngx_str_t *canon_uri = ngx_http_aws_auth__canon_uri(r, &path);
+    canon_uri = ngx_http_aws_auth__canon_uri(r, &path);
 
     total_len = http_method->len + canon_uri->len + canon_qs->len
         + canon_headers.canon_header_str->len
