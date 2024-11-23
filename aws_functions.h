@@ -130,10 +130,10 @@ ngx_http_aws_auth__is_already_encoded(u_char *data, size_t len)
 
     for (i = 0; i < len - 2; i++) {
         if (data[i] == '%' &&
-            ((data[i+1] >= '0' && data[i+1] <= '9') 
-             || (data[i+1] >= 'A' && data[i+1] <= 'F'))
-            && ((data[i+2] >= '0' && data[i+2] <= '9')
-                || (data[i+2] >= 'A' && data[i+2] <= 'F')))
+            ((data[i + 1] >= '0' && data[i + 1] <= '9') 
+             || (data[i + 1] >= 'A' && data[i + 1] <= 'F'))
+            && ((data[i + 2] >= '0' && data[i +2 ] <= '9')
+                || (data[i + 2] >= 'A' && data[i + 2] <= 'F')))
         {
             return NGX_OK;
         }
@@ -185,7 +185,8 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
 
         len = equal - p;
         if (len > 0) {
-            if (len >= 3 && ngx_http_aws_auth__is_already_encoded(p, len)) {
+            if (len >= 3 && ngx_http_aws_auth__is_already_encoded(p, len)
+                == NGX_OK) {
                 qs_arg->key.data = ngx_palloc(r->pool, len);
                 if (qs_arg->key.data == NULL) {
                     safe_ngx_log_error(r, "failed to allocate memory for "
@@ -210,8 +211,8 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
 
         len = ampersand - equal;
         if (len > 0) {
-            if (len >= 3
-                && ngx_http_aws_auth__is_already_encoded(equal + 1, len - 1)) {
+            if (len >= 3 && ngx_http_aws_auth__is_already_encoded(equal + 1,
+                len - 1) == NGX_OK) {
                 qs_arg->value.data = ngx_palloc(r->pool, len - 1);
                 if (qs_arg->value.data == NULL) {
                     safe_ngx_log_error(r, "failed to allocate memory for "
