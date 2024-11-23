@@ -197,7 +197,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
         total_len += qs_arg->key.len + 1 + qs_arg->value.len + 1; // key + '=' + value + '&'
     }
 
-    if (query_string_args->nelts = 0) {
+    if (query_string_args->nelts == 0) {
         return &EMPTY_STRING;
     }
 
@@ -226,7 +226,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
         retval->len++;
     }
 
-    if (retval->len = 0) {
+    if (retval->len == 0) {
         return &EMPTY_STRING;
     }
 
