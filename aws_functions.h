@@ -474,7 +474,7 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
         http_method, url, canon_qs, canon_headers.canon_header_str,
         canon_headers.signed_header_names, request_body_hash);
 
-    retval->canon_request.len = p - retval->canon_request.data;
+    retval.canon_request.len = p - retval.canon_request.data;
     retval.header_list = canon_headers.header_list;
 
     safe_ngx_log_info(r, "canonical request is %V", retval.canon_request);
