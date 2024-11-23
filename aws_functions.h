@@ -445,16 +445,17 @@ ngx_http_aws_auth__escape_uri(ngx_http_request_t *r, ngx_str_t* src)
         src->len = escaped_data_len;
     }
 
-  src->data = escaped_data;
+    src->data = escaped_data;
 }
 
 
 static inline const ngx_str_t*
-ngx_http_aws_auth__canon_url(ngx_http_request_t *r)
+ngx_http_aws_auth__canon_uri(ngx_http_request_t *r)
 {
-    ngx_str_t *retval;
-    const u_char *uri_data;
-    u_int uri_len;
+    ngx_str_t      *retval;
+    u_char         *src, *dst;
+    const u_char   *uri_data;
+    u_int           uri_len;
 
     if (r->args.len == 0) {
         uri_data = r->uri.data;
@@ -466,9 +467,28 @@ ngx_http_aws_auth__canon_url(ngx_http_request_t *r)
 
     // we need to copy that data to not modify the request for other modules
     retval = ngx_palloc(r->pool, sizeof(ngx_str_t));
+    if (retval == NULL) {
+        safe_ngx_log_error(r, "failed to allocate memory for retval");
+        return &EMPTY_STRING;
+    }
+
     retval->data = ngx_palloc(r->pool, uri_len);
-    ngx_memcpy(retval->data, uri_data, uri_len);
-    retval->len = uri_len;
+    if (retval->data == NULL) {
+        safe_ngx_log_error(r, "failed to allocate memory for "
+            "retval->data");
+        return &EMPTY_STRING;
+    }
+
+    if (uri_len >= 3 && ngx_http_aws_auth__is_already_encoded(
+            (u_char *)uri_data, uri_len) == NGX_OK) {
+        src = (u_char *)uri_data;
+        dst = retval->data;
+        ngx_unescape_uri(&dst, &src, uri_len, 0);
+        retval->len = dst - retval->data;
+    } else {
+        ngx_memcpy(retval->data, uri_data, uri_len);
+        retval->len = uri_len;
+    }
 
     safe_ngx_log_info(r, "canonical url extracted before "
         "uri encoding is %V", retval);
@@ -503,13 +523,15 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
             host, amz_date, request_body_hash);
     retval.signed_header_names = canon_headers.signed_header_names;
 
+    // process covert head method
     const ngx_str_t *http_method = &(r->method_name);
     if (r->method == NGX_HTTP_HEAD && *convert_head) {
         static ngx_str_t get_method = ngx_string("GET");
         http_method = &get_method;
     }
 
-    const ngx_str_t *url = ngx_http_aws_auth__canon_url(r);
+    // canonize uri
+    const ngx_str_t *url = ngx_http_aws_auth__canon_uri(r);
 
     total_len = http_method->len + url->len + canon_qs->len
         + canon_headers.canon_header_str->len
