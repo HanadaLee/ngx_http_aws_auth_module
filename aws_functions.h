@@ -164,12 +164,12 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
         return &EMPTY_STRING;
     }
 
-    if (args.len == 0) {
+    if (args->len == 0) {
         p = r->args.data;
         last = p + r->args.len;
     } else {
-        p = args.data;
-        last = p + args.len;
+        p = args->data;
+        last = p + args->len;
     }
 
     for ( /* void */ ; p < last; p++) {
@@ -459,9 +459,9 @@ ngx_http_aws_auth__canon_uri(ngx_http_request_t *r, const ngx_str_t *path)
     const u_char   *uri_data;
     u_int           uri_len;
 
-    if (path.len != 0) {
-        uri_data = path.data;
-        uri_len = path.len;
+    if (path->len != 0) {
+        uri_data = path->data;
+        uri_len = path->len;
     } else if (r->args.len == 0) {
         uri_data = r->uri.data;
         uri_len = r->uri.len;
@@ -518,6 +518,7 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
     ngx_str_t                         path, args;
     u_char                           *question_mark;
     const ngx_str_t                  *canon_qs;
+    const ngx_str_t                  *canon_uri;
 
     if (uri->len == 0) {
         path.data = NULL;
@@ -539,7 +540,7 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
 
     // canonize query string
     if (r->args.len == 0) {
-        canon_qs = EMPTY_STRING;
+        canon_qs = &EMPTY_STRING;
     } else {
         canon_qs = ngx_http_aws_auth__canonize_query_string(r, &args);
     }
@@ -561,9 +562,9 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
     }
 
     // canonize uri
-    const ngx_str_t *uri = ngx_http_aws_auth__canon_uri(r, &path);
+    const ngx_str_t *canon_uri = ngx_http_aws_auth__canon_uri(r, &path);
 
-    total_len = http_method->len + uri->len + canon_qs->len
+    total_len = http_method->len + canon_uri->len + canon_qs->len
         + canon_headers.canon_header_str->len
         + canon_headers.signed_header_names->len
         + request_body_hash->len + 5;
@@ -573,7 +574,7 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
 
     p = retval.canon_request->data;
     p = ngx_snprintf(p, total_len, "%V\n%V\n%V\n%V\n%V\n%V",
-        http_method, uri, canon_qs, canon_headers.canon_header_str,
+        http_method, canon_uri, canon_qs, canon_headers.canon_header_str,
         canon_headers.signed_header_names, request_body_hash);
 
     retval.canon_request->len = p - retval.canon_request->data;
@@ -800,7 +801,7 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
     const ngx_str_t *key_scope, const ngx_str_t *secret_key,
     const ngx_str_t *region, const ngx_str_t *bucket,
     const ngx_str_t *endpoint, ngx_http_complex_value_t *host,
-    const ngx_flag_t *convert_head)
+    ngx_http_complex_value_t *uri, const ngx_flag_t *convert_head)
 {
     ngx_str_t         local_signing_key;
     ngx_str_t         local_key_scope;
@@ -847,8 +848,8 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
             return NULL;
         }
         if (compiled_uri.len == 0 || compiled_uri.data[0] != '/') {
-            safe_ngx_log_info(r, "compiled uri does not start with a slash, 
-            setting to empty value");
+            safe_ngx_log_info(r, "compiled uri does not start with a slash, "
+                              "setting to empty value");
             compiled_uri.len = 0;
             compiled_uri.data = (u_char *)"";
         }
