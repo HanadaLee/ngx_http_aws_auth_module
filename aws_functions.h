@@ -119,6 +119,30 @@ ngx_http_aws_auth__cmp_hnames(const void *one, const void *two)
 }
 
 
+static inline const ngx_int_t
+ngx_http_aws_auth__is_already_encoded(u_char *data, size_t len)
+{
+    size_t i;
+
+    if (len < 3) {
+        return NGX_DECLINED;
+    }
+
+    for (i = 0; i < len - 2; i++) {
+        if (data[i] == '%' &&
+            ((data[i+1] >= '0' && data[i+1] <= '9') 
+             || (data[i+1] >= 'A' && data[i+1] <= 'F'))
+            && ((data[i+2] >= '0' && data[i+2] <= '9')
+                || (data[i+2] >= 'A' && data[i+2] <= 'F')))
+        {
+            return NGX_OK;
+        }
+    }
+
+    return NGX_DECLINED;
+}
+
+
 static inline const ngx_str_t*
 ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
 {
@@ -161,26 +185,52 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r)
 
         len = equal - p;
         if (len > 0) {
-            qs_arg->key.data = ngx_palloc(r->pool, len * 3);
-            if (qs_arg->key.data == NULL) {
-                safe_ngx_log_error(r, "failed to allocate memory for qs_arg->key.data");
-                return &EMPTY_STRING;
+            if (len >= 3 && ngx_http_aws_auth__is_already_encoded(p, len)) {
+                qs_arg->key.data = ngx_palloc(r->pool, len);
+                if (qs_arg->key.data == NULL) {
+                    safe_ngx_log_error(r, "failed to allocate memory for "
+                        "qs_arg->key.data");
+                    return &EMPTY_STRING;
+                }
+                ngx_memcpy(qs_arg->key.data, p, len);
+                qs_arg->key.len = len;
+            } else {
+                qs_arg->key.data = ngx_palloc(r->pool, len * 3);
+                if (qs_arg->key.data == NULL) {
+                    safe_ngx_log_error(r, "failed to allocate memory for "
+                        "qs_arg->key.data");
+                    return &EMPTY_STRING;
+                }
+                qs_arg->key.len = (u_char *)ngx_escape_uri(qs_arg->key.data,
+                    p, len, NGX_ESCAPE_ARGS) - qs_arg->key.data;
             }
-            qs_arg->key.len = (u_char *)ngx_escape_uri(qs_arg->key.data,
-                p, len, NGX_ESCAPE_ARGS) - qs_arg->key.data;
         } else {
             qs_arg->key = EMPTY_STRING;
         }
 
         len = ampersand - equal;
         if (len > 0) {
-            qs_arg->value.data = ngx_palloc(r->pool, len * 3);
-            if (qs_arg->key.data == NULL) {
-                safe_ngx_log_error(r, "failed to allocate memory for qs_arg->key.data");
-                return &EMPTY_STRING;
+            if (len >= 3
+                && ngx_http_aws_auth__is_already_encoded(equal + 1, len - 1)) {
+                qs_arg->value.data = ngx_palloc(r->pool, len - 1);
+                if (qs_arg->value.data == NULL) {
+                    safe_ngx_log_error(r, "failed to allocate memory for "
+                        "qs_arg->value.data");
+                    return &EMPTY_STRING;
+                }
+                ngx_memcpy(qs_arg->value.data, equal + 1, len - 1);
+                qs_arg->value.len = len - 1;
+            } else {
+                qs_arg->value.data = ngx_palloc(r->pool, len * 3);
+                if (qs_arg->key.data == NULL) {
+                    safe_ngx_log_error(r, "failed to allocate memory for "
+                        "qs_arg->key.data");
+                    return &EMPTY_STRING;
+                }
+                qs_arg->value.len = (u_char *)ngx_escape_uri(
+                    qs_arg->value.data, equal + 1, len - 1, NGX_ESCAPE_ARGS)
+                    - qs_arg->value.data;
             }
-            qs_arg->value.len = (u_char *)ngx_escape_uri(qs_arg->value.data,
-                 equal + 1, len - 1, NGX_ESCAPE_ARGS) - qs_arg->value.data;
         } else {
             qs_arg->value = EMPTY_STRING;
         }
