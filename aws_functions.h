@@ -529,39 +529,25 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
     args.data = (u_char *)"";
     args.len = 0;
 
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "debug1");
-
     if (uri != NULL && uri->data != NULL && uri->len > 0) {
         path.data = uri->data;
         path.len = uri->len;
 
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "debug2");
-
         question_mark = ngx_strlchr(uri->data, uri->data + uri->len, '?');
 
-        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "debug3");
-
-        if ((question_mark + 1) < (uri->data + uri->len)) {
+        if (question_mark != NULL) {
+            path.len = question_mark - uri->data;
             args.data = question_mark + 1;
             args.len = uri->len - path.len - 1;
-        } else {
-            // Handle case where '?' is the last character in URI
-            args.data = (u_char *)"";
-            args.len = 0;
         }
 
-        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-            "debug4");
     }
 
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "canonizing query string");
 
     // canonize query string
-    if (r->args.len == 0) {
+    if (r->args.len == 0 && args.len == 0) {
         canon_qs = &EMPTY_STRING;
     } else {
         canon_qs = ngx_http_aws_auth__canonize_query_string(r, &args);
