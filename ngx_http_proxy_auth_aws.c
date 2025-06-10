@@ -8,159 +8,159 @@
 #define AWS_DATE_VARIABLE "aws_date"
 
 
-static void* ngx_http_aws_auth_create_loc_conf(ngx_conf_t *cf);
-static char* ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf,
+static void* ngx_http_proxy_auth_aws_create_loc_conf(ngx_conf_t *cf);
+static char* ngx_http_proxy_auth_aws_merge_loc_conf(ngx_conf_t *cf,
     void *parent, void *child);
-static ngx_int_t ngx_http_aws_auth_sign(ngx_http_request_t *r);
-static ngx_int_t ngx_http_aws_auth_req_init(ngx_conf_t *cf);
+static ngx_int_t ngx_http_proxy_auth_aws_sign(ngx_http_request_t *r);
+static ngx_int_t ngx_http_proxy_auth_aws_req_init(ngx_conf_t *cf);
 
 
 typedef struct {
-    ngx_flag_t                enable;
-    ngx_flag_t                convert_head;
+    ngx_flag_t                 enable;
+    ngx_flag_t                 convert_head;
 
-    ngx_array_t              *bypass;
+    ngx_array_t               *bypass;
 
-    ngx_str_t                 access_key;
-    ngx_str_t                 key_scope;
-    ngx_str_t                 signing_key;
-    ngx_str_t                 secret_key;
-    ngx_str_t                 region;
-    ngx_str_t                 signing_key_decoded;
-    ngx_str_t                 endpoint;
-    ngx_str_t                 bucket;
+    ngx_str_t                  access_key;
+    ngx_str_t                  key_scope;
+    ngx_str_t                  signing_key;
+    ngx_str_t                  secret_key;
+    ngx_str_t                  region;
+    ngx_str_t                  signing_key_decoded;
+    ngx_str_t                  endpoint;
+    ngx_str_t                  bucket;
 
-    ngx_http_complex_value_t *host;
-    ngx_http_complex_value_t *uri;
-} ngx_http_aws_auth_conf_t;
+    ngx_http_complex_value_t  *host;
+    ngx_http_complex_value_t  *uri;
+} ngx_http_proxy_auth_aws_conf_t;
 
 
-static ngx_command_t  ngx_http_aws_auth_commands[] = {
-    { ngx_string("aws_auth_access_key"),
+static ngx_command_t  ngx_http_proxy_auth_aws_commands[] = {
+    { ngx_string("proxy_auth_aws_access_key"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, access_key),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, access_key),
       NULL },
 
-    { ngx_string("aws_auth_key_scope"),
+    { ngx_string("proxy_auth_aws_key_scope"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, key_scope),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, key_scope),
       NULL },
 
-    { ngx_string("aws_auth_signing_key"),
+    { ngx_string("proxy_auth_aws_signing_key"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, signing_key),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, signing_key),
       NULL },
 
-    { ngx_string("aws_auth_secret_key"),
+    { ngx_string("proxy_auth_aws_secret_key"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, secret_key),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, secret_key),
       NULL },
 
-    { ngx_string("aws_auth_region"),
+    { ngx_string("proxy_auth_aws_region"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, region),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, region),
       NULL },
 
-    { ngx_string("aws_auth_endpoint"),
+    { ngx_string("proxy_auth_aws_endpoint"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, endpoint),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, endpoint),
       NULL },
 
-    { ngx_string("aws_auth_bucket"),
+    { ngx_string("proxy_auth_aws_bucket"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, bucket),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, bucket),
       NULL },
 
-    { ngx_string("aws_auth_host"),
+    { ngx_string("proxy_auth_aws_host"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_http_set_complex_value_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, host),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, host),
       NULL },
 
-    { ngx_string("aws_auth_uri"),
+    { ngx_string("proxy_auth_aws_uri"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_http_set_complex_value_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, uri),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, uri),
       NULL },
 
-    { ngx_string("aws_auth_convert_head"),
+    { ngx_string("proxy_auth_aws_convert_head"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_FLAG,
       ngx_conf_set_flag_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, convert_head),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, convert_head),
       NULL },
 
-    { ngx_string("aws_auth_bypass"),
+    { ngx_string("proxy_auth_aws_bypass"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
       ngx_http_set_predicate_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, bypass),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, bypass),
       NULL },
 
-    { ngx_string("aws_auth"),
+    { ngx_string("proxy_auth_aws"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_FLAG,
       ngx_conf_set_flag_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      offsetof(ngx_http_aws_auth_conf_t, enable),
+      offsetof(ngx_http_proxy_auth_aws_conf_t, enable),
       NULL },
 
       ngx_null_command
 };
 
 
-static ngx_http_module_t  ngx_http_aws_auth_module_ctx = {
-    NULL,                                  /* preconfiguration */
-    ngx_http_aws_auth_req_init,            /* postconfiguration */
+static ngx_http_module_t  ngx_http_proxy_auth_aws_module_ctx = {
+    NULL,                                      /* preconfiguration */
+    ngx_http_proxy_auth_aws_req_init,          /* postconfiguration */
 
-    NULL,                                  /* create main configuration */
-    NULL,                                  /* init main configuration */
+    NULL,                                      /* create main configuration */
+    NULL,                                      /* init main configuration */
 
-    NULL,                                  /* create server configuration */
-    NULL,                                  /* merge server configuration */
+    NULL,                                      /* create server configuration */
+    NULL,                                      /* merge server configuration */
 
-    ngx_http_aws_auth_create_loc_conf,     /* create location configuration */
-    ngx_http_aws_auth_merge_loc_conf       /* merge location configuration */
+    ngx_http_proxy_auth_aws_create_loc_conf,   /* create location configuration */
+    ngx_http_proxy_auth_aws_merge_loc_conf     /* merge location configuration */
 };
 
 
-ngx_module_t  ngx_http_aws_auth_module = {
+ngx_module_t  ngx_http_proxy_auth_aws_module = {
     NGX_MODULE_V1,
-    &ngx_http_aws_auth_module_ctx,         /* module context */
-    ngx_http_aws_auth_commands,            /* module directives */
-    NGX_HTTP_MODULE,                       /* module type */
-    NULL,                                  /* init master */
-    NULL,                                  /* init module */
-    NULL,                                  /* init process */
-    NULL,                                  /* init thread */
-    NULL,                                  /* exit thread */
-    NULL,                                  /* exit process */
-    NULL,                                  /* exit master */
+    &ngx_http_proxy_auth_aws_module_ctx,        /* module context */
+    ngx_http_proxy_auth_aws_commands,           /* module directives */
+    NGX_HTTP_MODULE,                            /* module type */
+    NULL,                                       /* init master */
+    NULL,                                       /* init module */
+    NULL,                                       /* init process */
+    NULL,                                       /* init thread */
+    NULL,                                       /* exit thread */
+    NULL,                                       /* exit process */
+    NULL,                                       /* exit master */
     NGX_MODULE_V1_PADDING
 };
 
 
 static void *
-ngx_http_aws_auth_create_loc_conf(ngx_conf_t *cf)
+ngx_http_proxy_auth_aws_create_loc_conf(ngx_conf_t *cf)
 {
-    ngx_http_aws_auth_conf_t  *conf;
+    ngx_http_proxy_auth_aws_conf_t  *conf;
 
-    conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_aws_auth_conf_t));
+    conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_proxy_auth_aws_conf_t));
     if (conf == NULL) {
         return NULL;
     }
@@ -177,10 +177,11 @@ ngx_http_aws_auth_create_loc_conf(ngx_conf_t *cf)
 
 
 static char *
-ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
+ngx_http_proxy_auth_aws_merge_loc_conf(ngx_conf_t *cf, void *parent,
+    void *child)
 {
-    ngx_http_aws_auth_conf_t *prev = parent;
-    ngx_http_aws_auth_conf_t *conf = child;
+    ngx_http_proxy_auth_aws_conf_t *prev = parent;
+    ngx_http_proxy_auth_aws_conf_t *conf = child;
 
     ngx_conf_merge_value(conf->enable, prev->enable, 0);
     ngx_conf_merge_value(conf->convert_head, prev->convert_head, 1);
@@ -218,10 +219,10 @@ ngx_http_aws_auth_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 
 static ngx_int_t
-ngx_http_aws_auth_sign(ngx_http_request_t *r)
+ngx_http_proxy_auth_aws_sign(ngx_http_request_t *r)
 {
-    ngx_http_aws_auth_conf_t *conf = ngx_http_get_module_loc_conf(r,
-        ngx_http_aws_auth_module);
+    ngx_http_proxy_auth_aws_conf_t *conf = ngx_http_get_module_loc_conf(r,
+        ngx_http_proxy_auth_aws_module);
     ngx_table_elt_t          *h;
     header_pair_t            *hv;
     ngx_uint_t                i, j;
@@ -251,7 +252,7 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
         return NGX_DECLINED;
     }
 
-    const ngx_array_t* headers_out = ngx_http_aws_auth__sign(r,
+    const ngx_array_t* headers_out = ngx_http_proxy_auth_aws__sign(r,
         &conf->access_key, &conf->signing_key_decoded, &conf->key_scope,
         &conf->secret_key, &conf->region, &conf->bucket, &conf->endpoint,
         conf->host, conf->uri, &conf->convert_head);
@@ -333,7 +334,7 @@ ngx_http_aws_auth_sign(ngx_http_request_t *r)
 
 
 static ngx_int_t
-ngx_http_aws_auth_req_init(ngx_conf_t *cf)
+ngx_http_proxy_auth_aws_req_init(ngx_conf_t *cf)
 {
     ngx_http_handler_pt        *h;
     ngx_http_core_main_conf_t  *cmcf;
@@ -345,7 +346,7 @@ ngx_http_aws_auth_req_init(ngx_conf_t *cf)
         return NGX_ERROR;
     }
 
-    *h = ngx_http_aws_auth_sign;
+    *h = ngx_http_proxy_auth_aws_sign;
 
     return NGX_OK;
 }

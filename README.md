@@ -1,8 +1,5 @@
 # AWS proxy module
 
-[![Build Status](https://travis-ci.com/anomalizer/ngx_aws_auth.svg?branch=master)](https://travis-ci.com/anomalizer/ngx_aws_auth)
- [![Gitter chat](https://badges.gitter.im/anomalizer/ngx_aws_auth.png)](https://gitter.im/ngx_aws_auth/Lobby?utm_source=share-link&utm_medium=link&utm_campaign=share-link)
-
 This nginx module can proxy requests to authenticated S3 backends using Amazon's
 V4 authentication API. The first version of this module was written for the V2
 authentication protocol and can be found in the *AuthV2* branch.
@@ -20,20 +17,20 @@ Implements proxying of authenticated requests to S3.
   server {
     listen     8000;
 
-    # aws_auth_convert_head is on by default.
-    # If you set `proxy_cache_convert_head` to off, or the `proxy_cache` function is not enabled, please also set `aws_auth_convert_head` to off. Otherwise, the HEAD request may be intercepted.
+    # proxy_auth_aws_convert_head is on by default.
+    # If you set `proxy_cache_convert_head` to off, or the `proxy_cache` function is not enabled, please also set `proxy_auth_aws_convert_head` to off. Otherwise, the HEAD request may be intercepted.
     # proxy_cache_convert_head off;
-    # aws_auth_convert_head off;
+    # proxy_auth_aws_convert_head off;
 
     # Determine whether to append an authentication header based on the values ​​of multiple variables.
-    # aws_auth_bypass $http_no_s3_auth $arg_no_s3_auth $cookie_no_s3_auth $http_authorization;
+    # proxy_auth_aws_bypass $http_no_s3_auth $arg_no_s3_auth $cookie_no_s3_auth $http_authorization;
 
     location / {
-      aws_auth on;
-      aws_auth_access_key your_aws_access_key; # Example AKIDEXAMPLE
-      aws_auth_key_scope scope_of_generated_signing_key; #Example 20150830/us-east-1/service/aws4_request
-      aws_auth_signing_key signing_key_generated_using_script; #Example L4vRLWAO92X5L3Sqk5QydUSdB0nC9+1wfqLMOKLbRp4=
-      aws_auth_bucket your_s3_bucket;
+      proxy_auth_aws on;
+      proxy_auth_aws_access_key your_aws_access_key; # Example AKIDEXAMPLE
+      proxy_auth_aws_key_scope scope_of_generated_signing_key; #Example 20150830/us-east-1/service/aws4_request
+      proxy_auth_aws_signing_key signing_key_generated_using_script; #Example L4vRLWAO92X5L3Sqk5QydUSdB0nC9+1wfqLMOKLbRp4=
+      proxy_auth_aws_bucket your_s3_bucket;
       proxy_pass http://your_s3_bucket.s3.amazonaws.com;
     }
 
@@ -43,10 +40,10 @@ Implements proxying of authenticated requests to S3.
       rewrite /myfiles/(.*) /$1 break;
       proxy_pass http://your_s3_bucket.s3.amazonaws.com/$1;
 
-      aws_auth_access_key your_aws_access_key;
-      aws_auth_key_scope scope_of_generated_signing_key;
-      aws_auth_signing_key signing_key_generated_using_script;
-      aws_auth_bucket your_s3_bucket;
+      proxy_auth_aws_access_key your_aws_access_key;
+      proxy_auth_aws_key_scope scope_of_generated_signing_key;
+      proxy_auth_aws_signing_key signing_key_generated_using_script;
+      proxy_auth_aws_bucket your_s3_bucket;
     }
 
     # This is an example that use specific s3 endpoint, default endpoint is s3.amazonaws.com
@@ -55,37 +52,37 @@ Implements proxying of authenticated requests to S3.
       rewrite /s3_beijing/(.*) /$1 break;
       proxy_pass http://your_s3_bucket.s3.cn-north-1.amazonaws.com.cn/$1;
 
-      aws_auth on;
-      aws_auth_endpoint s3.cn-north-1.amazonaws.com.cn;
-      aws_auth_access_key your_aws_access_key;
-      aws_auth_key_scope scope_of_generated_signing_key;
-      aws_auth_signing_key signing_key_generated_using_script;
-      aws_auth_bucket your_s3_bucket;
+      proxy_auth_aws on;
+      proxy_auth_aws_endpoint s3.cn-north-1.amazonaws.com.cn;
+      proxy_auth_aws_access_key your_aws_access_key;
+      proxy_auth_aws_key_scope scope_of_generated_signing_key;
+      proxy_auth_aws_signing_key signing_key_generated_using_script;
+      proxy_auth_aws_bucket your_s3_bucket;
     }
 
     # This is an example that specific upstream host and uri
-    # Be careful not to use aws_auth_host and aws_auth_bucket + aws_auth_endpoint at the same time, aws_auth_bucket + aws_auth_endpoint will have higher priority.
+    # Be careful not to use proxy_auth_aws_host and proxy_auth_aws_bucket + proxy_auth_aws_endpoint at the same time, proxy_auth_aws_bucket + proxy_auth_aws_endpoint will have higher priority.
     location /s3_beijing_2 {
       set $upstream_host your_s3_bucket.s3.cn-north-1.amazonaws.com.cn;
       set $upstream_uri /test.txt;
       proxy_pass http://$upstream_host$upstream_uri;
-      aws_auth on;
-      aws_auth_host $upstream_host;
-      aws_auth_uri $upstream_uri;
-      aws_auth_access_key your_aws_access_key;
-      aws_auth_key_scope scope_of_generated_signing_key;
-      aws_auth_signing_key signing_key_generated_using_script;
+      proxy_auth_aws on;
+      proxy_auth_aws_host $upstream_host;
+      proxy_auth_aws_uri $upstream_uri;
+      proxy_auth_aws_access_key your_aws_access_key;
+      proxy_auth_aws_key_scope scope_of_generated_signing_key;
+      proxy_auth_aws_signing_key signing_key_generated_using_script;
     }
 
     # Security warning: Placing the secret key in the nginx configuration is unsafe. Please give priority to using the script mentioned below to generate and regularly update the signing key. Only use this solution as a last resort.
     # This is an example that automatically calculate signing_key and key_scope
     location /s3_beijing_3 {
-      aws_auth on;
-      aws_auth_access_key your_aws_access_key; # Example AKIDEXAMPLE
-      aws_auth_secret_key your_aws_secret_key; # Example LTAxxxxxxxx
-      aws_auth_region cn-north-1;
-      aws_auth_endpoint s3.cn-north-1.amazonaws.com.cn;
-      aws_auth_bucket your_s3_bucket;
+      proxy_auth_aws on;
+      proxy_auth_aws_access_key your_aws_access_key; # Example AKIDEXAMPLE
+      proxy_auth_aws_secret_key your_aws_secret_key; # Example LTAxxxxxxxx
+      proxy_auth_aws_region cn-north-1;
+      proxy_auth_aws_endpoint s3.cn-north-1.amazonaws.com.cn;
+      proxy_auth_aws_bucket your_s3_bucket;
       proxy_pass http://your_s3_bucket.s3.amazonaws.com;
     }
   }

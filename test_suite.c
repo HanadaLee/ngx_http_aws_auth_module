@@ -30,12 +30,12 @@ static void host_header_ctor(void **state)
 
     bucket.data = "test-es-three";
     bucket.len = strlen(bucket.data);
-    host = ngx_http_aws_auth__host_from_bucket(r->pool, &bucket);
+    host = ngx_http_proxy_auth_aws__host_from_bucket(r->pool, &bucket);
     assert_string_equal("test-es-three.s3.amazonaws.com", host->data);
 
     bucket.data = "complex.sub.domain.test";
     bucket.len = strlen(bucket.data);
-    host = ngx_http_aws_auth__host_from_bucket(r->pool, &bucket);
+    host = ngx_http_proxy_auth_aws__host_from_bucket(r->pool, &bucket);
     assert_string_equal("complex.sub.domain.test.s3.amazonaws.com",
         host->data);
 }
@@ -48,12 +48,12 @@ static void x_amz_date(void **state)
     (void) state; /* unused */
 
     t = 1;
-    date = ngx_http_aws_auth__compute_request_time(r->pool, &t);
+    date = ngx_http_proxy_auth_aws__compute_request_time(r->pool, &t);
     assert_int_equal(date->len, 16);
     assert_string_equal("19700101T000001Z", date->data);
 
     t = 1456036272;
-    date = ngx_http_aws_auth__compute_request_time(r->pool, &t);
+    date = ngx_http_proxy_auth_aws__compute_request_time(r->pool, &t);
     assert_int_equal(date->len, 16);
     assert_string_equal("20160221T063112Z", date->data);
 }
@@ -68,14 +68,14 @@ static void hmac_sha256(void **state)
 
     key.data = "abc"; key.len=3;
     text.data = "asdf"; text.len=4;
-    hash = ngx_http_aws_auth__sign_sha256_hex(r->pool, &text, &key);
+    hash = ngx_http_proxy_auth_aws__sign_sha256_hex(r->pool, &text, &key);
     assert_int_equal(64, hash->len);
     assert_string_equal("07e434c45d15994e620bf8e43da6f"
         "652d331989be1783cdfcc989ddb0a2358e2", hash->data);
 
     key.data = "\011\001\057asf"; key.len=6;
     text.data = "lorem ipsum"; text.len=11;
-    hash = ngx_http_aws_auth__sign_sha256_hex(r->pool, &text, &key);
+    hash = ngx_http_proxy_auth_aws__sign_sha256_hex(r->pool, &text, &key);
     assert_int_equal(64, hash->len);
     assert_string_equal("827ce31c45e77292af25fef980c3"
         "e7afde23abcde622ecd8e82e1be6dd94fad3", hash->data);
@@ -89,13 +89,13 @@ static void sha256(void **state)
     (void) state; /* unused */
 
     text.data = "asdf"; text.len=4;
-    hash = ngx_http_aws_auth__hash_sha256(r->pool, &text);
+    hash = ngx_http_proxy_auth_aws__hash_sha256(r->pool, &text);
     assert_int_equal(64, hash->len);
     assert_string_equal("f0e4c2f76c58916ec258f246851bea09"
         "1d14d4247a2fc3e18694461b1816e13b", hash->data);
 
     text.len=0;
-    hash = ngx_http_aws_auth__hash_sha256(r->pool, &text);
+    hash = ngx_http_proxy_auth_aws__hash_sha256(r->pool, &text);
     assert_int_equal(64, hash->len);
     assert_string_equal("e3b0c44298fc1c149afbf4c8996fb9242"
         "7ae41e4649b934ca495991b7852b855", hash->data);
@@ -114,7 +114,7 @@ static void canon_header_string(void **state)
         "a2fc3e18694461b1816e13b"; hash.len = 64;
     endpoint.data = "s3.amazonaws.com"; endpoint.len = 16;
 
-    retval = ngx_http_aws_auth__canonize_headers(r->pool, NULL,
+    retval = ngx_http_proxy_auth_aws__canonize_headers(r->pool, NULL,
         &bucket, &date, &hash, &endpoint);
     assert_string_equal(retval.canon_header_str->data,
         "host:bugait.s3.amazonaws.com\n"
@@ -134,7 +134,7 @@ static void signed_headers(void **state)
     hash.data = "f0e4c2f76c58916ec258f246851bea091d14d4247a2fc3e18694461b1816e13b"; hash.len = 64;
     endpoint.data = "s3.amazonaws.com"; endpoint.len = 16;
 
-    retval = ngx_http_aws_auth__canonize_headers(r->pool, NULL, &bucket, &date, &hash, &endpoint);
+    retval = ngx_http_proxy_auth_aws__canonize_headers(r->pool, NULL, &bucket, &date, &hash, &endpoint);
     assert_string_equal(retval.signed_header_names->data, "host;x-amz-content-sha256;x-amz-date");
 }
 
@@ -144,7 +144,7 @@ static void canonical_qs_empty(void **state)
     r.args = EMPTY_STRING;
     r.connection = NULL;
 
-    const ngx_str_t *canon_qs = ngx_http_aws_auth__canonize_query_string(r->pool);
+    const ngx_str_t *canon_qs = ngx_http_proxy_auth_aws__canonize_query_string(r->pool);
     assert_ngx_string_equal(*canon_qs, EMPTY_STRING);
 }
 
@@ -155,7 +155,7 @@ static void canonical_qs_single_arg(void **state)
     r.args = args;
     r.connection = NULL;
 
-    const ngx_str_t *canon_qs = ngx_http_aws_auth__canonize_query_string(&r);
+    const ngx_str_t *canon_qs = ngx_http_proxy_auth_aws__canonize_query_string(&r);
     assert_ngx_string_equal(*canon_qs, args);
 }
 
@@ -167,7 +167,7 @@ static void canonical_qs_two_arg_reverse(void **state)
     r.args = args;
     r.connection = NULL;
 
-    const ngx_str_t *canon_qs = ngx_http_aws_auth__canonize_query_string(&r);
+    const ngx_str_t *canon_qs = ngx_http_proxy_auth_aws__canonize_query_string(&r);
     assert_ngx_string_equal(*canon_qs, cargs);
 }
 
@@ -179,7 +179,7 @@ static void canonical_qs_subrequest(void **state)
     r.args = args;
     r.connection = NULL;
 
-    const ngx_str_t *canon_qs = ngx_http_aws_auth__canonize_query_string(&r);
+    const ngx_str_t *canon_qs = ngx_http_proxy_auth_aws__canonize_query_string(&r);
     assert_ngx_string_equal(*canon_qs, cargs);
 }
 
@@ -194,7 +194,7 @@ static void canonical_url_sans_qs(void **state)
     r.args = EMPTY_STRING;
     r.connection = NULL;
 
-    const ngx_str_t *canon_url = ngx_http_aws_auth__canon_url(&r);
+    const ngx_str_t *canon_url = ngx_http_proxy_auth_aws__canon_url(&r);
     assert_int_equal(canon_url->len, url.len);
     assert_ngx_string_equal(*canon_url, url);
 }
@@ -216,7 +216,7 @@ static void canonical_url_with_qs(void **state)
     r.args = args;
     r.connection = NULL;
 
-    const ngx_str_t *canon_url = ngx_http_aws_auth__canon_url(&r);
+    const ngx_str_t *canon_url = ngx_http_proxy_auth_aws__canon_url(&r);
     assert_int_equal(canon_url->len, curl.len);
     assert_ngx_string_equal(*canon_url, curl);
 }
@@ -234,7 +234,7 @@ static void canonical_url_with_special_chars(void **state)
     r.args = EMPTY_STRING;
     r.connection = NULL;
 
-    const ngx_str_t *canon_url = ngx_http_aws_auth__canon_url(&r);
+    const ngx_str_t *canon_url = ngx_http_proxy_auth_aws__canon_url(&r);
     assert_int_equal(canon_url->len, expected_canon_url.len);
     assert_ngx_string_equal(*canon_url, expected_canon_url);
 }
@@ -255,7 +255,7 @@ static void canonical_request_sans_qs(void **state)
     r.args = EMPTY_STRING;
     r.connection = NULL;
 
-    result = ngx_http_aws_auth__make_canonical_request(&r, &bucket, &aws_date, &endpoint);
+    result = ngx_http_proxy_auth_aws__make_canonical_request(&r, &bucket, &aws_date, &endpoint);
     assert_string_equal(result.canon_request->data, "GET\n\
 /\n\
 \n\
@@ -289,7 +289,7 @@ static void basic_get_signature(void **state)
     signing_key.data = ngx_palloc(r->pool, signing_key.len );
     ngx_decode_base64(&signing_key, &signing_key_b64e);
 
-    struct AwsSignedRequestDetails result = ngx_http_aws_auth__compute_signature(&r,
+    struct AwsSignedRequestDetails result = ngx_http_proxy_auth_aws__compute_signature(&r,
                                 &signing_key, &key_scope, &bucket, &endpoint);
     assert_string_equal(result.signature->data, "4ed4ec875ff02e55c7903339f4f24f8780b986a9cc9eff03f324d31da6a57690");
 }

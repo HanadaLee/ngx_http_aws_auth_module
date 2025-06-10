@@ -18,7 +18,8 @@
 static const EVP_MD* evp_md = NULL;
 
 
-ngx_str_t* ngx_http_aws_auth__sign_sha256(ngx_http_request_t *r,
+ngx_str_t *
+ngx_http_proxy_auth_aws__sign_sha256(ngx_http_request_t *r,
     const ngx_str_t *blob, const ngx_str_t *signing_key)
 {
     unsigned int      md_len;
@@ -39,7 +40,8 @@ ngx_str_t* ngx_http_aws_auth__sign_sha256(ngx_http_request_t *r,
 }
 
 
-ngx_str_t* ngx_http_aws_auth__sign_sha256_hex(ngx_http_request_t *r,
+ngx_str_t *
+ngx_http_proxy_auth_aws__sign_sha256_hex(ngx_http_request_t *r,
     const ngx_str_t *blob, const ngx_str_t *signing_key)
 {
 
@@ -60,7 +62,8 @@ ngx_str_t* ngx_http_aws_auth__sign_sha256_hex(ngx_http_request_t *r,
 }
 
 
-ngx_str_t* ngx_http_aws_auth__hash_sha256(ngx_http_request_t *r,
+ngx_str_t *
+ngx_http_proxy_auth_aws__hash_sha256(ngx_http_request_t *r,
     const ngx_str_t *blob)
 {
     unsigned char hash[EVP_MAX_MD_SIZE];
@@ -71,21 +74,24 @@ ngx_str_t* ngx_http_aws_auth__hash_sha256(ngx_http_request_t *r,
     mdctx = EVP_MD_CTX_new();
     
     if (mdctx == NULL) {
-        // Handle error
         return NULL;
     }
 
-    if ((mdctx = EVP_MD_CTX_create()) == NULL)
+    if ((mdctx = EVP_MD_CTX_create()) == NULL) {
         return NULL;
+    }
 
-    if (1 != EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL))
+    if (1 != EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL)) {
         return NULL;
+    }
 
-    if (1 != EVP_DigestUpdate(mdctx, blob->data, blob->len))
+    if (1 != EVP_DigestUpdate(mdctx, blob->data, blob->len)) {
         return NULL;
+    }
 
-    if (1 != EVP_DigestFinal_ex(mdctx, hash, &hash_len))
+    if (1 != EVP_DigestFinal_ex(mdctx, hash, &hash_len)) {
         return NULL;
+    }
 
     EVP_MD_CTX_free(mdctx);
 

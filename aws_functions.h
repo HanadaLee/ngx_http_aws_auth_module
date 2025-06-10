@@ -23,6 +23,7 @@
 #ifndef __NGX_HTTP_AWS_FUNCTIONS_INTERNAL__H__
 #define __NGX_HTTP_AWS_FUNCTIONS_INTERNAL__H__
 
+
 #include <time.h>
 #include <ngx_times.h>
 #include <ngx_core.h>
@@ -30,32 +31,38 @@
 
 #include "crypto_helper.h"
 
+
 #define AMZ_DATE_MAX_LEN 20
 #define STRING_TO_SIGN_LENGTH 3000
 
+
 typedef ngx_keyval_t header_pair_t;
+
 
 struct AwsCanonicalRequestDetails {
     ngx_str_t       *canon_request;
     ngx_str_t       *signed_header_names;
-    ngx_array_t     *header_list; // list of header_pair_t
+    ngx_array_t     *header_list; /* list of header_pair_t */
 };
+
 
 struct AwsCanonicalHeaderDetails {
     ngx_str_t       *canon_header_str;
     ngx_str_t       *signed_header_names;
-    ngx_array_t     *header_list; // list of header_pair_t
+    ngx_array_t     *header_list; /* list of header_pair_t */
 };
+
 
 struct AwsSignedRequestDetails {
     const ngx_str_t *signature;
     const ngx_str_t *signed_header_names;
-    ngx_array_t     *header_list; // list of header_pair_t
+    ngx_array_t     *header_list; /* list of header_pair_t */
 };
 
 
-// mainly useful to avoid having to full instantiate request structures for
-// tests...
+/* mainly useful to avoid having to full instantiate request structures
+ * for tests...
+ */
 #define safe_ngx_log_error(r, ...)                                       \
     if (r->connection) {                                                 \
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, __VA_ARGS__);  \
@@ -89,7 +96,7 @@ static inline const char* __CONST_CHAR_PTR_U(const u_char* ptr)
 
 
 static inline const ngx_str_t*
-ngx_http_aws_auth__compute_request_time(ngx_http_request_t *r,
+ngx_http_proxy_auth_aws__compute_request_time(ngx_http_request_t *r,
     const time_t *timep)
 {
     ngx_str_t *const retval = ngx_palloc(r->pool, sizeof(ngx_str_t));
@@ -103,7 +110,7 @@ ngx_http_aws_auth__compute_request_time(ngx_http_request_t *r,
 
 
 static inline int
-ngx_http_aws_auth__cmp_hnames(const void *one, const void *two)
+ngx_http_proxy_auth_aws__cmp_hnames(const void *one, const void *two)
 {
     header_pair_t *first, *second;
     int ret;
@@ -113,6 +120,7 @@ ngx_http_aws_auth__cmp_hnames(const void *one, const void *two)
                       ngx_min(first->key.len, second->key.len));
     if (ret != 0) {
         return ret;
+
     } else {
         return (first->key.len - second->key.len);
     }
@@ -120,7 +128,7 @@ ngx_http_aws_auth__cmp_hnames(const void *one, const void *two)
 
 
 static inline ngx_int_t
-ngx_http_aws_auth__is_already_encoded(u_char *data, size_t len)
+ngx_http_proxy_auth_aws__is_already_encoded(u_char *data, size_t len)
 {
     size_t i;
 
@@ -144,7 +152,7 @@ ngx_http_aws_auth__is_already_encoded(u_char *data, size_t len)
 
 
 static inline const ngx_str_t*
-ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
+ngx_http_proxy_auth_aws__canonize_query_string(ngx_http_request_t *r,
     const ngx_str_t *args)
 {
     u_char *p, *ampersand, *equal, *last;
@@ -167,6 +175,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
     if (args->len == 0) {
         p = r->args.data;
         last = p + r->args.len;
+
     } else {
         p = args->data;
         last = p + args->len;
@@ -187,8 +196,9 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
 
         len = equal - p;
         if (len > 0) {
-            if (len >= 3 && ngx_http_aws_auth__is_already_encoded(p, len)
-                == NGX_OK) {
+            if (len >= 3 && ngx_http_proxy_auth_aws__is_already_encoded(p, len)
+                == NGX_OK)
+            {
                 qs_arg->key.data = ngx_palloc(r->pool, len);
                 if (qs_arg->key.data == NULL) {
                     safe_ngx_log_error(r, "failed to allocate memory for "
@@ -197,6 +207,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
                 }
                 ngx_memcpy(qs_arg->key.data, p, len);
                 qs_arg->key.len = len;
+
             } else {
                 qs_arg->key.data = ngx_palloc(r->pool, len * 3);
                 if (qs_arg->key.data == NULL) {
@@ -207,14 +218,17 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
                 qs_arg->key.len = (u_char *)ngx_escape_uri(qs_arg->key.data,
                     p, len, NGX_ESCAPE_ARGS) - qs_arg->key.data;
             }
+
         } else {
             qs_arg->key = EMPTY_STRING;
         }
 
         len = ampersand - equal;
         if (len > 0) {
-            if (len >= 3 && ngx_http_aws_auth__is_already_encoded(equal + 1,
-                len - 1) == NGX_OK) {
+
+            if (len >= 3 && ngx_http_proxy_auth_aws__is_already_encoded(
+                equal + 1, len - 1) == NGX_OK)
+            {
                 qs_arg->value.data = ngx_palloc(r->pool, len - 1);
                 if (qs_arg->value.data == NULL) {
                     safe_ngx_log_error(r, "failed to allocate memory for "
@@ -223,6 +237,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
                 }
                 ngx_memcpy(qs_arg->value.data, equal + 1, len - 1);
                 qs_arg->value.len = len - 1;
+
             } else {
                 qs_arg->value.data = ngx_palloc(r->pool, len * 3);
                 if (qs_arg->key.data == NULL) {
@@ -234,6 +249,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
                     qs_arg->value.data, equal + 1, len - 1, NGX_ESCAPE_ARGS)
                     - qs_arg->value.data;
             }
+
         } else {
             qs_arg->value = EMPTY_STRING;
         }
@@ -243,13 +259,13 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
 
     if (query_string_args->nelts > 0) {
         ngx_qsort(query_string_args->elts, (size_t) query_string_args->nelts,
-            sizeof(header_pair_t), ngx_http_aws_auth__cmp_hnames);
+            sizeof(header_pair_t), ngx_http_proxy_auth_aws__cmp_hnames);
     }
 
     total_len = 0;
     for (i = 0; i < query_string_args->nelts; i++) {
         qs_arg = &((header_pair_t*)query_string_args->elts)[i];
-        total_len += qs_arg->key.len + 1 + qs_arg->value.len + 1; // key + '=' + value + '&'
+        total_len += qs_arg->key.len + 1 + qs_arg->value.len + 1; /* key + '=' + value + '&' */
     }
 
     if (query_string_args->nelts == 0) {
@@ -261,6 +277,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
         safe_ngx_log_error(r, "failed to allocate memory for retval->data");
         return &EMPTY_STRING;
     }
+
     retval->len = 0;
 
     for (i = 0; i < query_string_args->nelts; i++) {
@@ -294,7 +311,7 @@ ngx_http_aws_auth__canonize_query_string(ngx_http_request_t *r,
 
 
 static inline const ngx_str_t*
-ngx_http_aws_auth__host_from_bucket(ngx_http_request_t *r,
+ngx_http_proxy_auth_aws__host_from_bucket(ngx_http_request_t *r,
     const ngx_str_t *bucket)
 {
     static const char HOST_PATTERN[] = ".s3.amazonaws.com";
@@ -311,7 +328,7 @@ ngx_http_aws_auth__host_from_bucket(ngx_http_request_t *r,
 
 
 static inline struct AwsCanonicalHeaderDetails
-ngx_http_aws_auth__canonize_headers(ngx_http_request_t *r,
+ngx_http_proxy_auth_aws__canonize_headers(ngx_http_request_t *r,
     const ngx_str_t *host, const ngx_str_t *amz_date,
     const ngx_str_t *content_hash)
 {
@@ -338,7 +355,7 @@ ngx_http_aws_auth__canonize_headers(ngx_http_request_t *r,
 
     ngx_qsort(settable_header_array->elts,
               (size_t) settable_header_array->nelts, sizeof(header_pair_t),
-              ngx_http_aws_auth__cmp_hnames);
+              ngx_http_proxy_auth_aws__cmp_hnames);
     retval.header_list = settable_header_array;
 
     for (i = 0; i < settable_header_array->nelts; i++) {
@@ -384,29 +401,30 @@ ngx_http_aws_auth__canonize_headers(ngx_http_request_t *r,
 
 
 static inline const ngx_str_t*
-ngx_http_aws_auth__request_body_hash(ngx_http_request_t *r)
+ngx_http_proxy_auth_aws__request_body_hash(ngx_http_request_t *r)
 {
     /* TODO: support cases involving non-empty body */
     return &EMPTY_STRING_SHA256;
 }
 
 
-// AWS wants a peculiar kind of URI-encoding: they want RFC 3986, except that
-// slashes shouldn't be encoded...
-// this function is a light wrapper around ngx_escape_uri that does exactly that
-// modifies the source in place if it needs to be escaped
-// see http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
+/* AWS wants a peculiar kind of URI-encoding: they want RFC 3986, except that
+ * slashes shouldn't be encoded...
+ * this function is a light wrapper around ngx_escape_uri that does exactly that
+ * modifies the source in place if it needs to be escaped 
+ * see http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
+ */
 static inline void
-ngx_http_aws_auth__escape_uri(ngx_http_request_t *r, ngx_str_t* src)
+ngx_http_proxy_auth_aws__escape_uri(ngx_http_request_t *r, ngx_str_t* src)
 {
     u_char *escaped_data;
     u_int escaped_data_len, escaped_data_with_slashes_len, i, j;
     uintptr_t escaped_count, slashes_count = 0;
 
-    // first, we need to know how many characters need to be escaped
+    /* first, we need to know how many characters need to be escaped */
     escaped_count = ngx_escape_uri(NULL, src->data, src->len,
         NGX_ESCAPE_URI_COMPONENT);
-    // except slashes should not be escaped...
+    /* except slashes should not be escaped... */
     if (escaped_count > 0) {
         for (i = 0; i < src->len; i++) {
             if (src->data[i] == '/') {
@@ -416,25 +434,28 @@ ngx_http_aws_auth__escape_uri(ngx_http_request_t *r, ngx_str_t* src)
     }
 
     if (escaped_count == slashes_count) {
-        // nothing to do! nothing but slashes escaped (if even that)
+        /* nothing to do! nothing but slashes escaped (if even that) */
         return;
     }
 
-    // each escaped character is replaced by 3 characters
+    /* each escaped character is replaced by 3 characters */
     escaped_data_len = src->len + escaped_count * 2;
     escaped_data = ngx_palloc(r->pool, escaped_data_len);
     ngx_escape_uri(escaped_data, src->data, src->len,
         NGX_ESCAPE_URI_COMPONENT);
 
-    // now we need to go back and re-replace each occurrence of %2F with a slash
+    /* now we need to go back and re-replace each occurrence of %2F with a slash */
     escaped_data_with_slashes_len = src->len
         + (escaped_count - slashes_count) * 2;
     if (slashes_count > 0) {
+
         for (i = 0, j = 0; i < escaped_data_with_slashes_len; i++) {
+
             if (j < escaped_data_len - 2
                 && strncmp((char*) (escaped_data + j), "%2F", 3) == 0) {
                 escaped_data[i] = '/';
                 j += 3;
+
             } else {
                 escaped_data[i] = escaped_data[j];
                 j++;
@@ -442,8 +463,9 @@ ngx_http_aws_auth__escape_uri(ngx_http_request_t *r, ngx_str_t* src)
         }
 
         src->len = escaped_data_with_slashes_len;
+
     } else {
-        // no slashes
+        /* no slashes */
         src->len = escaped_data_len;
     }
 
@@ -452,7 +474,7 @@ ngx_http_aws_auth__escape_uri(ngx_http_request_t *r, ngx_str_t* src)
 
 
 static inline const ngx_str_t*
-ngx_http_aws_auth__canon_uri(ngx_http_request_t *r, const ngx_str_t *path)
+ngx_http_proxy_auth_aws__canon_uri(ngx_http_request_t *r, const ngx_str_t *path)
 {
     ngx_str_t      *retval;
     u_char         *src, *dst;
@@ -462,15 +484,17 @@ ngx_http_aws_auth__canon_uri(ngx_http_request_t *r, const ngx_str_t *path)
     if (path->len != 0) {
         uri_data = path->data;
         uri_len = path->len;
+
     } else if (r->args.len == 0) {
         uri_data = r->uri.data;
         uri_len = r->uri.len;
+
     } else {
         uri_data = r->uri_start;
         uri_len = r->args_start - r->uri_start - 1;
     }
 
-    // we need to copy that data to not modify the request for other modules
+    /* we need to copy that data to not modify the request for other modules */
     retval = ngx_palloc(r->pool, sizeof(ngx_str_t));
     if (retval == NULL) {
         safe_ngx_log_error(r, "failed to allocate memory for retval");
@@ -484,12 +508,13 @@ ngx_http_aws_auth__canon_uri(ngx_http_request_t *r, const ngx_str_t *path)
         return &EMPTY_STRING;
     }
 
-    if (uri_len >= 3 && ngx_http_aws_auth__is_already_encoded(
+    if (uri_len >= 3 && ngx_http_proxy_auth_aws__is_already_encoded(
             (u_char *)uri_data, uri_len) == NGX_OK) {
         src = (u_char *)uri_data;
         dst = retval->data;
         ngx_unescape_uri(&dst, &src, uri_len, 0);
         retval->len = dst - retval->data;
+
     } else {
         ngx_memcpy(retval->data, uri_data, uri_len);
         retval->len = uri_len;
@@ -498,8 +523,8 @@ ngx_http_aws_auth__canon_uri(ngx_http_request_t *r, const ngx_str_t *path)
     safe_ngx_log_info(r, "canonical url extracted before "
         "uri encoding is %V", retval);
 
-    // then URI-encode it per RFC 3986
-    ngx_http_aws_auth__escape_uri(r, retval);
+    /* then URI-encode it per RFC 3986 */
+    ngx_http_proxy_auth_aws__escape_uri(r, retval);
     safe_ngx_log_info(r, "canonical url extracted after "
         "uri encoding is %V", retval);
 
@@ -508,7 +533,7 @@ ngx_http_aws_auth__canon_uri(ngx_http_request_t *r, const ngx_str_t *path)
 
 
 static inline struct AwsCanonicalRequestDetails
-ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
+ngx_http_proxy_auth_aws__make_canonical_request(ngx_http_request_t *r,
     const ngx_str_t *host, const ngx_str_t *uri,
     const ngx_str_t *amz_date, const ngx_flag_t *convert_head)
 {
@@ -522,7 +547,7 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
 
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "making cononical request");
-    
+
     path.data = (u_char *)"";
     path.len = 0;
 
@@ -546,31 +571,32 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "canonizing query string");
 
-    // canonize query string
+    /* canonize query string */
     if (r->args.len == 0 && args.len == 0) {
         canon_qs = &EMPTY_STRING;
+
     } else {
-        canon_qs = ngx_http_aws_auth__canonize_query_string(r, &args);
+        canon_qs = ngx_http_proxy_auth_aws__canonize_query_string(r, &args);
     }
 
-    // compute request body hash
+    /* compute request body hash */
     const ngx_str_t *request_body_hash =
-        ngx_http_aws_auth__request_body_hash(r);
+        ngx_http_proxy_auth_aws__request_body_hash(r);
 
     const struct AwsCanonicalHeaderDetails canon_headers =
-        ngx_http_aws_auth__canonize_headers(r,
+        ngx_http_proxy_auth_aws__canonize_headers(r,
             host, amz_date, request_body_hash);
     retval.signed_header_names = canon_headers.signed_header_names;
 
-    // process covert head method
+    /* process covert head method */
     const ngx_str_t *http_method = &(r->method_name);
     if (r->method == NGX_HTTP_HEAD && *convert_head) {
         static ngx_str_t get_method = ngx_string("GET");
         http_method = &get_method;
     }
 
-    // canonize uri
-    canon_uri = ngx_http_aws_auth__canon_uri(r, &path);
+    /* canonize uri */
+    canon_uri = ngx_http_proxy_auth_aws__canon_uri(r, &path);
 
     total_len = http_method->len + canon_uri->len + canon_qs->len
         + canon_headers.canon_header_str->len
@@ -596,7 +622,7 @@ ngx_http_aws_auth__make_canonical_request(ngx_http_request_t *r,
 
 
 static inline const ngx_str_t*
-ngx_http_aws_auth__string_to_sign(ngx_http_request_t *r,
+ngx_http_proxy_auth_aws__string_to_sign(ngx_http_request_t *r,
     const ngx_str_t *key_scope,	const ngx_str_t *date,
     const ngx_str_t *canon_request_hash)
 {
@@ -613,7 +639,7 @@ ngx_http_aws_auth__string_to_sign(ngx_http_request_t *r,
 
 
 static inline const ngx_str_t*
-ngx_http_aws_auth__make_auth_token(ngx_http_request_t *r,
+ngx_http_proxy_auth_aws__make_auth_token(ngx_http_request_t *r,
     const ngx_str_t *signature, const ngx_str_t *signed_header_names,
     const ngx_str_t *access_key, const ngx_str_t *key_scope)
 {
@@ -633,7 +659,7 @@ ngx_http_aws_auth__make_auth_token(ngx_http_request_t *r,
 
 
 static inline struct AwsSignedRequestDetails
-ngx_http_aws_auth__compute_signature(ngx_http_request_t *r,
+ngx_http_proxy_auth_aws__compute_signature(ngx_http_request_t *r,
     const ngx_str_t *signing_key, const ngx_str_t *key_scope,
     const ngx_str_t *host, const ngx_str_t *uri,
     const ngx_flag_t *convert_head)
@@ -641,18 +667,19 @@ ngx_http_aws_auth__compute_signature(ngx_http_request_t *r,
     struct AwsSignedRequestDetails retval;
 
     const ngx_str_t *date =
-        ngx_http_aws_auth__compute_request_time(r, &r->start_sec);
+        ngx_http_proxy_auth_aws__compute_request_time(r, &r->start_sec);
     const struct AwsCanonicalRequestDetails canon_request =
-        ngx_http_aws_auth__make_canonical_request(r, host, uri, date, convert_head);
-    const ngx_str_t *canon_request_hash = ngx_http_aws_auth__hash_sha256(r,
+        ngx_http_proxy_auth_aws__make_canonical_request(r, host, uri, date,
+                                                        convert_head);
+    const ngx_str_t *canon_request_hash = ngx_http_proxy_auth_aws__hash_sha256(r,
         canon_request.canon_request);
 
-    // get string to sign
-    const ngx_str_t *string_to_sign = ngx_http_aws_auth__string_to_sign(r,
+    /* get string to sign */
+    const ngx_str_t *string_to_sign = ngx_http_proxy_auth_aws__string_to_sign(r,
         key_scope, date, canon_request_hash);
 
-    // generate signature
-    const ngx_str_t *signature = ngx_http_aws_auth__sign_sha256_hex(r,
+    /* generate signature */
+    const ngx_str_t *signature = ngx_http_proxy_auth_aws__sign_sha256_hex(r,
         string_to_sign, signing_key);
 
     retval.signature = signature;
@@ -663,7 +690,7 @@ ngx_http_aws_auth__compute_signature(ngx_http_request_t *r,
 
 
 static inline ngx_int_t
-ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
+ngx_http_proxy_auth_aws__generate_signing_key(ngx_http_request_t *r,
     const ngx_str_t *secret_key, const ngx_str_t *region,
     ngx_str_t *signature_key, ngx_str_t *key_scope)
 {
@@ -722,35 +749,35 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
                    "generate_signing_key: k_secret prepared (length=%uz)",
                    k_secret_len);
 
-    ngx_str_t data_to_sign_date = {8, date_stamp}; // date_stamp
-    ngx_str_t data_to_sign_region = *region;        // region
-    ngx_str_t data_to_sign_service = service;       // service
-    ngx_str_t data_to_sign_request = aws4_request;  // "aws4_request"
+    ngx_str_t data_to_sign_date = {8, date_stamp};  /* date_stamp */
+    ngx_str_t data_to_sign_region = *region;        /* region */
+    ngx_str_t data_to_sign_service = service;       /* service */
+    ngx_str_t data_to_sign_request = aws4_request;  /* "aws4_request" */
 
     ngx_str_t current_key;
     current_key.data = k_secret;
     current_key.len = k_secret_len;
 
-    // starting HMAC calculations
+    /* starting HMAC calculations */
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "generate_signing_key: starting HMAC calculations");
 
-    // Step 1: kDate = HMAC_SHA256("AWS4" + secret_key, date_stamp)
-    ngx_str_t *kDate = ngx_http_aws_auth__sign_sha256(r,
+    /* Step 1: k_date = HMAC_SHA256("AWS4" + secret_key, date_stamp) */
+    ngx_str_t *k_date = ngx_http_proxy_auth_aws__sign_sha256(r,
         &data_to_sign_date, &current_key);
 
-    if (kDate == NULL) {
+    if (k_date == NULL) {
         safe_ngx_log_error(r, "generate_signing_key: HMAC_SHA256 failed "
-                      "at step kDate");
+                      "at step k_date");
         return NGX_ERROR;
     }
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "generate_signing_key: kDate computed (len=%uz)",
-                   kDate->len);
+                   "generate_signing_key: k_date computed (len=%uz)",
+                   k_date->len);
 
-    // Step 2: k_region = HMAC_SHA256(kDate, region)
-    ngx_str_t *k_region = ngx_http_aws_auth__sign_sha256(r,
-        &data_to_sign_region, kDate);
+    /* Step 2: k_region = HMAC_SHA256(k_date, region) */
+    ngx_str_t *k_region = ngx_http_proxy_auth_aws__sign_sha256(r,
+        &data_to_sign_region, k_date);
     if (k_region == NULL) {
         safe_ngx_log_error(r, "generate_signing_key: HMAC_SHA256 failed "
                       "at step k_region");
@@ -760,8 +787,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
                    "generate_signing_key: k_region computed (len=%uz)",
                    k_region->len);
 
-    // Step 3: k_service = HMAC_SHA256(k_region, service)
-    ngx_str_t *k_service = ngx_http_aws_auth__sign_sha256(r,
+    /* Step 3: k_service = HMAC_SHA256(k_region, service) */
+    ngx_str_t *k_service = ngx_http_proxy_auth_aws__sign_sha256(r,
         &data_to_sign_service, k_region);
     if (k_service == NULL) {
         safe_ngx_log_error(r, "generate_signing_key: HMAC_SHA256 failed "
@@ -772,8 +799,8 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
                    "generate_signing_key: k_service computed (len=%uz)",
                    k_service->len);
 
-    // Step 4: k_signing  = HMAC_SHA256(k_service, aws4_request)
-    ngx_str_t *k_signing  = ngx_http_aws_auth__sign_sha256(r,
+    /* Step 4: k_signing  = HMAC_SHA256(k_service, aws4_request) */
+    ngx_str_t *k_signing  = ngx_http_proxy_auth_aws__sign_sha256(r,
         &data_to_sign_request, k_service);
     if (k_signing  == NULL) {
         safe_ngx_log_error(r, "generate_signing_key: HMAC_SHA256 failed "
@@ -802,9 +829,9 @@ ngx_http_aws_auth__generate_signing_key(ngx_http_request_t *r,
 }
 
 
-// list of header_pair_t
+/* list of header_pair_t */
 static inline const ngx_array_t*
-ngx_http_aws_auth__sign(ngx_http_request_t *r,
+ngx_http_proxy_auth_aws__sign(ngx_http_request_t *r,
     const ngx_str_t *access_key, const ngx_str_t *signing_key,
     const ngx_str_t *key_scope, const ngx_str_t *secret_key,
     const ngx_str_t *region, const ngx_str_t *bucket,
@@ -818,11 +845,12 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
     ngx_str_t         compiled_host, compiled_uri;
 
     if (signing_key == NULL || signing_key->len == 0
-        || signing_key->data == NULL) {
+        || signing_key->data == NULL)
+    {
         ngx_memzero(&local_signing_key, sizeof(ngx_str_t));
         ngx_memzero(&local_key_scope, sizeof(ngx_str_t));
 
-        ngx_http_aws_auth__generate_signing_key(r, secret_key, region,
+        ngx_http_proxy_auth_aws__generate_signing_key(r, secret_key, region,
             &local_signing_key, &local_key_scope);
 
         used_signing_key = &local_signing_key;
@@ -833,14 +861,17 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
                    "generating aws host");
 
     if (bucket->len == 0) {
+
         if (host == NULL) {
             safe_ngx_log_error(r, "host is not set");
             return NULL;
         }
+
         if (ngx_http_complex_value(r, host, &compiled_host) != NGX_OK) {
             safe_ngx_log_error(r, "failed to compile host complex value");
             return NULL;
         }
+
     } else {
         size_t host_len = bucket->len + 1 + endpoint->len;
         compiled_host.data = ngx_pnalloc(r->pool, host_len);
@@ -857,10 +888,12 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
                    "generating uri");
 
     if (uri != NULL) {
+
         if (ngx_http_complex_value(r, uri, &compiled_uri) != NGX_OK) {
             safe_ngx_log_error(r, "failed to compile uri complex value");
             return NULL;
         }
+
         if (compiled_uri.len == 0 || compiled_uri.data[0] != '/') {
             safe_ngx_log_info(r, "compiled uri does not start with a slash, "
                               "setting to empty value");
@@ -873,12 +906,12 @@ ngx_http_aws_auth__sign(ngx_http_request_t *r,
                    "computing aws signature");
 
     const struct AwsSignedRequestDetails signature_details =
-        ngx_http_aws_auth__compute_signature(r,
+        ngx_http_proxy_auth_aws__compute_signature(r,
             used_signing_key, used_key_scope,
             &compiled_host, &compiled_uri, convert_head);
 
     const ngx_str_t *auth_header_value =
-        ngx_http_aws_auth__make_auth_token(r, signature_details.signature,
+        ngx_http_proxy_auth_aws__make_auth_token(r, signature_details.signature,
             signature_details.signed_header_names, access_key, used_key_scope);
 
     header_pair_t *header_ptr;
